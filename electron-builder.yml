@@ -1,0 +1,20 @@
+appId: com.wavy.app
+productName: Wavy
+copyright: Copyright 2024 Wavy Contributors
+directories:
+  output: dist
+  buildResources: resources
+files:
+  - from: .
+    filter:
+      - package.json
+      - app
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  hardenedRuntime: true
+publish: null
