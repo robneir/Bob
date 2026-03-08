@@ -138,7 +138,7 @@ export default function WidgetContainer() {
   useEffect(() => {
     if (!contentRef.current || !window.bob?.resizeWidget) return
 
-    const maxHeight = Math.floor(window.screen.availHeight / 2)
+    const maxHeight = Math.floor(window.screen.availHeight - 32)
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {

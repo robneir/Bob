@@ -115,7 +115,7 @@ export default function ResponsePanel({
         <div
           ref={scrollRef}
           className="space-y-3.5 overflow-y-auto px-3.5 py-3.5 scrollbar-thin"
-          style={{ maxHeight: 'min(56vh, 560px)' }}
+          style={{ maxHeight: typeof window !== 'undefined' ? window.screen.availHeight - 140 : 560 }}
         >
           {/* Rendered messages */}
           {messages.map((msg, i) => (
