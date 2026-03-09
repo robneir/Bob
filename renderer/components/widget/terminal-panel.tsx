@@ -1,11 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
 import { X, Trash2, Settings } from 'lucide-react'
+
+type TerminalStatus = 'terminal' | 'listening' | 'transcribing'
 
 interface TerminalPanelProps {
   shortcutLabel: string
   onDismiss: () => void
   onClear: () => void
   visible?: boolean
+  status?: TerminalStatus
 }
 
 export default function TerminalPanel({
@@ -13,6 +17,7 @@ export default function TerminalPanel({
   onDismiss,
   onClear,
   visible = true,
+  status = 'terminal',
 }: TerminalPanelProps) {
   const termRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<any>(null)
@@ -149,10 +154,44 @@ export default function TerminalPanel({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/30 px-3 py-2">
         <div className="flex items-center gap-2">
-          <div className="h-2.5 w-2.5 rounded-full bg-green-500" />
-          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
-            Bob
-          </span>
+          {status === 'listening' ? (
+            <>
+              <div className="relative flex items-center justify-center">
+                <motion.div
+                  className="absolute h-3 w-3 rounded-full bg-red-500/30"
+                  animate={{ scale: [1, 1.8, 1], opacity: [0.5, 0, 0.5] }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                <div className="h-2 w-2 rounded-full bg-red-500" />
+              </div>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-red-400/90">
+                Listening
+              </span>
+            </>
+          ) : status === 'transcribing' ? (
+            <>
+              <div className="flex items-center gap-0.5">
+                {[0, 1, 2].map((i) => (
+                  <motion.div
+                    key={i}
+                    className="h-1.5 w-1.5 rounded-full bg-primary"
+                    animate={{ y: [0, -3, 0] }}
+                    transition={{ duration: 0.6, repeat: Infinity, ease: 'easeInOut', delay: i * 0.1 }}
+                  />
+                ))}
+              </div>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary/70">
+                Transcribing
+              </span>
+            </>
+          ) : (
+            <>
+              <div className="h-2.5 w-2.5 rounded-full bg-green-500" />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
+                Bob
+              </span>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <span className="rounded-full border border-border/50 bg-background/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">

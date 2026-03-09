@@ -216,19 +216,23 @@ export default function WidgetContainer() {
     return () => window.removeEventListener('keydown', onKey)
   }, [handleDismiss])
 
-  const showTerminal = state === 'terminal'
+  // Show terminal when PTY is alive and we're in terminal/listening/transcribing
+  const terminalActive = ptyAlive && (state === 'terminal' || state === 'listening' || state === 'transcribing')
+  // Only show standalone pills when terminal is NOT active
+  const showPills = !terminalActive
 
   return (
     <div className="absolute bottom-0 right-0 flex flex-col items-end justify-end p-2">
       <div ref={contentRef}>
         {/* Terminal panel — stays mounted while PTY is alive to preserve xterm state */}
         {ptyAlive && (
-          <div className={showTerminal ? '' : 'hidden'}>
+          <div className={terminalActive ? '' : 'hidden'}>
             <TerminalPanel
               shortcutLabel={shortcutLabel}
               onDismiss={handleDismiss}
               onClear={handleClear}
-              visible={showTerminal}
+              visible={terminalActive}
+              status={state === 'listening' ? 'listening' : state === 'transcribing' ? 'transcribing' : 'terminal'}
             />
           </div>
         )}
@@ -246,7 +250,7 @@ export default function WidgetContainer() {
             </motion.div>
           )}
 
-          {state === 'listening' && (
+          {showPills && state === 'listening' && (
             <motion.div
               key="listening"
               initial={{ opacity: 0, scale: 0.9 }}
@@ -261,7 +265,7 @@ export default function WidgetContainer() {
             </motion.div>
           )}
 
-          {state === 'transcribing' && (
+          {showPills && state === 'transcribing' && (
             <motion.div
               key="transcribing"
               initial={{ opacity: 0, scale: 0.9 }}
