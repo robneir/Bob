@@ -1,6 +1,8 @@
 import path from 'path'
+import os from 'os'
 import {
   app,
+  dialog,
   ipcMain,
   globalShortcut,
   Tray,
@@ -325,8 +327,77 @@ ipcMain.handle('whisper:load', async () => {
 
 // --- CLI / PTY ---
 
+// Handle CLI trust prompts (e.g. Claude Code "trust this folder") in the background.
+// Spawns the CLI briefly, auto-accepts the prompt, then exits. One-time per provider.
+async function ensureProviderTrusted(providerId: string, command: string): Promise<boolean> {
+  const trustKey = `cliTrusted_${providerId}`
+  if (settingsStore.get(trustKey)) return true
+
+  // Show a native dialog asking the user to grant trust
+  const { response } = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Allow', 'Cancel'],
+    defaultId: 0,
+    title: 'Folder Access',
+    message: `Allow Bob to run ${command} from your home directory?`,
+    detail: 'Some CLI tools need to trust the working directory on first use. Bob will handle this automatically. You only need to do this once.',
+  })
+
+  if (response !== 0) return false
+
+  // Spawn the CLI briefly to handle any trust/setup prompts
+  const { spawn: ptySpawn } = await import('node-pty')
+  const shell = process.env.SHELL || '/bin/zsh'
+
+  await new Promise<void>((resolve) => {
+    const tempPty = ptySpawn(shell, ['-l', '-c', command], {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 24,
+      cwd: os.homedir(),
+      env: process.env as Record<string, string>,
+    })
+
+    let output = ''
+    let done = false
+    let settleTimer: ReturnType<typeof setTimeout> | null = null
+
+    const finish = () => {
+      if (done) return
+      done = true
+      try { tempPty.kill() } catch {}
+      resolve()
+    }
+
+    tempPty.onData((data) => {
+      output += data
+
+      // Auto-accept trust/permission prompts
+      if (/trust.*(?:folder|directory|files)/i.test(output)) {
+        setTimeout(() => {
+          tempPty.write('y\n')
+          setTimeout(finish, 1500) // Wait for trust to persist
+        }, 150)
+        return
+      }
+
+      // If CLI is outputting non-trust content, it's already trusted — exit
+      if (settleTimer) clearTimeout(settleTimer)
+      settleTimer = setTimeout(finish, 800)
+    })
+
+    tempPty.onExit(() => finish())
+
+    // Hard timeout fallback
+    setTimeout(finish, 8000)
+  })
+
+  settingsStore.set(trustKey, true)
+  return true
+}
+
 ipcMain.handle('pty:spawn', async (event) => {
-  const { spawnCli, writeToPty } = await import('./lib/cli/pty-manager')
+  const { spawnCli } = await import('./lib/cli/pty-manager')
   const { CLI_PROVIDERS } = await import('./lib/cli/providers')
   const sender = event.sender
 
@@ -336,32 +407,22 @@ ipcMain.handle('pty:spawn', async (event) => {
     return { success: false, error: 'No CLI provider selected. Please select one in Settings.' }
   }
 
+  // Handle first-time trust before spawning the real session
+  const trusted = await ensureProviderTrusted(providerId, provider.command)
+  if (!trusted) {
+    return { success: false, error: 'Folder trust is required to use this CLI tool.' }
+  }
+
   const pty = spawnCli(provider.command)
 
-  let earlyOutput = ''
-  let trustHandled = false
   let readySignaled = false
   let readyTimer: ReturnType<typeof setTimeout> | null = null
 
   pty.onData((data) => {
     if (!sender.isDestroyed()) sender.send('pty:data', data)
 
-    // During startup: auto-handle trust prompts and detect readiness
+    // Signal ready when output settles (no new data for 800ms)
     if (!readySignaled) {
-      earlyOutput += data
-
-      // Auto-accept Claude Code trust prompt
-      if (
-        !trustHandled &&
-        providerId === 'claude' &&
-        /trust.*(?:folder|directory|files)/i.test(earlyOutput)
-      ) {
-        trustHandled = true
-        earlyOutput = ''
-        setTimeout(() => writeToPty('y\n'), 150)
-      }
-
-      // Signal ready when output settles (no new data for 800ms)
       if (readyTimer) clearTimeout(readyTimer)
       readyTimer = setTimeout(() => {
         readySignaled = true
