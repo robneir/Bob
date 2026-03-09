@@ -4,25 +4,17 @@ import { useAudioRecorder } from '../../hooks/use-audio-recorder'
 import IdlePill from './idle-pill'
 import RecordingPill from './recording-pill'
 import TranscribingPill from './transcribing-pill'
-import ResponsePanel from './response-panel'
-import StatusFeed from './status-feed'
+import TerminalPanel from './terminal-panel'
 import ErrorDisplay from './error-display'
 
 export type WidgetState =
   | 'idle'
   | 'listening'
   | 'transcribing'
-  | 'thinking'
-  | 'streaming'
-  | 'complete'
+  | 'terminal'
   | 'error'
 
-export interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-}
-
-const WIDGET_PADDING = 16 // p-2 = 8px * 2
+const WIDGET_PADDING = 16
 const DEFAULT_SHORTCUT_LABEL = 'Cmd + Shift + Space'
 
 function formatShortcutLabel(shortcut: string) {
@@ -56,101 +48,44 @@ function formatShortcutLabel(shortcut: string) {
 
 export default function WidgetContainer() {
   const [state, setState] = useState<WidgetState>('idle')
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [streamingResponse, setStreamingResponse] = useState('')
   const [error, setError] = useState('')
-  const [currentStatus, setCurrentStatus] = useState<{
-    step: string
-    message: string
-    icon: string
-  } | null>(null)
   const [shortcutLabel, setShortcutLabel] = useState(DEFAULT_SHORTCUT_LABEL)
-  const [sources, setSources] = useState<{ title: string; url: string }[]>([])
   const { startRecording, stopRecording, audioLevel } = useAudioRecorder()
   const stateRef = useRef<WidgetState>('idle')
   const contentRef = useRef<HTMLDivElement>(null)
-  const messagesRef = useRef<ChatMessage[]>([])
-  const streamTextRef = useRef('')
-  const streamBufferRef = useRef('')
-  const streamFrameRef = useRef<number | null>(null)
 
-  // Keep ref in sync with state for use in callbacks
   useEffect(() => {
     stateRef.current = state
   }, [state])
 
+  // Load shortcut label from settings
   useEffect(() => {
-    messagesRef.current = messages
-  }, [messages])
-
-  const cancelScheduledStreamFlush = useCallback(() => {
-    if (streamFrameRef.current !== null) {
-      cancelAnimationFrame(streamFrameRef.current)
-      streamFrameRef.current = null
-    }
-  }, [])
-
-  const flushStreamBuffer = useCallback(() => {
-    streamFrameRef.current = null
-
-    if (!streamBufferRef.current) {
-      return streamTextRef.current
-    }
-
-    streamTextRef.current += streamBufferRef.current
-    streamBufferRef.current = ''
-    setStreamingResponse(streamTextRef.current)
-
-    return streamTextRef.current
-  }, [])
-
-  const resetStreamingState = useCallback(() => {
-    cancelScheduledStreamFlush()
-    streamTextRef.current = ''
-    streamBufferRef.current = ''
-    setStreamingResponse('')
-  }, [cancelScheduledStreamFlush])
-
-  useEffect(() => () => cancelScheduledStreamFlush(), [cancelScheduledStreamFlush])
-
-  useEffect(() => {
+    if (!window.bob?.getSettings) return
     let cancelled = false
-
-    if (!window.bob?.getSettings) {
-      return
-    }
-
-    window.bob
-      .getSettings()
-      .then((settings) => {
-        if (cancelled) return
-
-        const shortcut =
-          settings && typeof settings.shortcut === 'string'
-            ? settings.shortcut
-            : ''
-
-        if (shortcut) {
-          setShortcutLabel(formatShortcutLabel(shortcut))
-        }
-      })
-      .catch(() => {})
-
-    return () => {
-      cancelled = true
-    }
+    window.bob.getSettings().then((settings) => {
+      if (cancelled) return
+      const shortcut = settings?.shortcut
+      if (typeof shortcut === 'string' && shortcut) {
+        setShortcutLabel(formatShortcutLabel(shortcut))
+      }
+    }).catch(() => {})
+    return () => { cancelled = true }
   }, [])
 
-  // Dynamically resize the Electron window to fit content
+  // Resize widget to fit content
   useEffect(() => {
     if (!contentRef.current || !window.bob?.resizeWidget) return
-
     const maxHeight = Math.floor(window.screen.availHeight - 32)
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const contentHeight = entry.borderBoxSize?.[0]?.blockSize ?? entry.target.getBoundingClientRect().height
-        const totalHeight = Math.min(Math.ceil(contentHeight) + WIDGET_PADDING, maxHeight)
+        const contentHeight =
+          entry.borderBoxSize?.[0]?.blockSize ??
+          entry.target.getBoundingClientRect().height
+        const totalHeight = Math.min(
+          Math.ceil(contentHeight) + WIDGET_PADDING,
+          maxHeight
+        )
         window.bob.resizeWidget(totalHeight)
       }
     })
@@ -159,31 +94,19 @@ export default function WidgetContainer() {
     return () => observer.disconnect()
   }, [])
 
-  // Listen for state changes from main process (shortcut triggers)
+  // Listen for state changes and recording events from main process
   useEffect(() => {
     if (!window.bob) return
 
     const unsubState = window.bob.onStateChange((newState) => {
       setState(newState as WidgetState)
-      if (newState === 'complete' || newState === 'idle' || newState === 'error') {
-        setCurrentStatus(null)
-      }
-    })
-
-    const unsubStatus = window.bob.onStatus?.((status) => {
-      setCurrentStatus(status)
-    })
-
-    const unsubSources = window.bob.onSources?.((newSources) => {
-      setSources((prev) => [...prev, ...newSources])
     })
 
     const unsubRecordStart = window.bob.onRecordingStart(async () => {
       try {
         setError('')
-        resetStreamingState()
         await startRecording()
-      } catch (err) {
+      } catch {
         setError('Microphone access denied. Please allow microphone access in System Settings.')
         setState('error')
       }
@@ -193,12 +116,14 @@ export default function WidgetContainer() {
       try {
         const audioData = await stopRecording()
 
+        // Too short — ignore
         if (audioData.length < 1600) {
-          if (messagesRef.current.length === 0) {
-            setState('idle')
-            if (window.bob) window.bob.hideWidget()
+          const alive = await window.bob.isPtyAlive()
+          if (alive) {
+            setState('terminal')
           } else {
-            setState('complete')
+            setState('idle')
+            window.bob.hideWidget()
           }
           return
         }
@@ -218,119 +143,65 @@ export default function WidgetContainer() {
 
         const text = result.text?.trim()
         if (!text) {
-          if (messagesRef.current.length === 0) {
-            setState('idle')
-            if (window.bob) window.bob.hideWidget()
+          const alive = await window.bob.isPtyAlive()
+          if (alive) {
+            setState('terminal')
           } else {
-            setState('complete')
+            setState('idle')
+            window.bob.hideWidget()
           }
           return
         }
 
-        setMessages((prev) => [...prev, { role: 'user', content: text }])
-        setState('thinking')
+        // Ensure CLI is spawned, then paste text into terminal
+        const alive = await window.bob.isPtyAlive()
+        if (!alive) {
+          await window.bob.spawnCli()
+        }
 
-        await window.bob.sendQuery(text)
+        setState('terminal')
+
+        // Small delay to let terminal mount, then paste
+        setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent('bob:paste-to-terminal', { detail: text })
+          )
+        }, alive ? 50 : 500)
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Recording failed'
-        setError(msg)
+        setError(err instanceof Error ? err.message : 'Recording failed')
         setState('error')
       }
     })
 
     return () => {
       unsubState()
-      unsubStatus?.()
-      unsubSources?.()
       unsubRecordStart()
       unsubRecordStop()
     }
-  }, [startRecording, stopRecording, resetStreamingState])
-
-  // Listen for LLM stream events
-  useEffect(() => {
-    if (!window.bob) return
-
-    const unsubToken = window.bob.onStreamToken((token) => {
-      streamBufferRef.current += token
-
-      if (streamFrameRef.current === null) {
-        streamFrameRef.current = window.requestAnimationFrame(flushStreamBuffer)
-      }
-    })
-
-    const unsubDone = window.bob.onStreamDone(() => {
-      cancelScheduledStreamFlush()
-      const response = flushStreamBuffer()
-
-      if (response) {
-        setMessages((prev) => [...prev, { role: 'assistant', content: response }])
-      }
-
-      streamTextRef.current = ''
-      streamBufferRef.current = ''
-      setStreamingResponse('')
-      setState('complete')
-    })
-
-    const unsubError = window.bob.onStreamError((err) => {
-      resetStreamingState()
-      setError(err)
-      setState('error')
-    })
-
-    return () => {
-      unsubToken()
-      unsubDone()
-      unsubError()
-    }
-  }, [cancelScheduledStreamFlush, flushStreamBuffer, resetStreamingState])
+  }, [startRecording, stopRecording])
 
   const handleDismiss = useCallback(() => {
-    setMessages([])
-    setSources([])
-    resetStreamingState()
     setError('')
-    if (window.bob) {
-      window.bob.clearConversation?.()
-      window.bob.hideWidget()
-    }
-  }, [resetStreamingState])
-
-  // Escape key dismisses the widget
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleDismiss()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleDismiss])
+    if (window.bob) window.bob.hideWidget()
+  }, [])
 
   const handleClear = useCallback(() => {
-    setMessages([])
-    setSources([])
-    resetStreamingState()
     setError('')
-    if (window.bob?.clearConversation) {
-      window.bob.clearConversation()
-    }
-    setState('idle')
     if (window.bob) {
+      window.bob.killPty()
       window.bob.hideWidget()
     }
-  }, [resetStreamingState])
+    setState('idle')
+  }, [])
 
-  const handleCopy = useCallback(() => {
-    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
-    if (lastAssistant) {
-      navigator.clipboard.writeText(lastAssistant.content)
-    } else if (streamingResponse) {
-      navigator.clipboard.writeText(streamingResponse)
+  // Escape key dismisses
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleDismiss()
     }
-  }, [messages, streamingResponse])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [handleDismiss])
 
   return (
     <div className="absolute bottom-0 right-0 flex flex-col items-end justify-end p-2">
@@ -375,26 +246,18 @@ export default function WidgetContainer() {
             </motion.div>
           )}
 
-          {(state === 'thinking' ||
-            state === 'streaming' ||
-            state === 'complete') && (
+          {state === 'terminal' && (
             <motion.div
-              key="response"
+              key="terminal"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
             >
-              <ResponsePanel
-                state={state}
-                messages={messages}
-                streamingResponse={streamingResponse}
+              <TerminalPanel
                 shortcutLabel={shortcutLabel}
-                currentStatus={currentStatus}
-                sources={sources}
                 onDismiss={handleDismiss}
                 onClear={handleClear}
-                onCopy={handleCopy}
               />
             </motion.div>
           )}
