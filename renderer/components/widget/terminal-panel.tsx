@@ -140,9 +140,9 @@ export default function TerminalPanel({
   useEffect(() => {
     const handler = (_e: Event) => {
       const detail = (_e as CustomEvent<string>).detail
-      if (detail && xtermRef.current) {
+      if (detail) {
         window.bob?.writePty(detail)
-        xtermRef.current.focus()
+        xtermRef.current?.focus()
       }
     }
     window.addEventListener('bob:paste-to-terminal', handler)

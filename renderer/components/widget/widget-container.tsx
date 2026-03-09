@@ -183,20 +183,14 @@ export default function WidgetContainer() {
           // Wait for CLI to finish startup (trust prompts, loading, etc.)
           await readyPromise
 
-          // CLI is ready — paste the text
-          setTimeout(() => {
-            window.dispatchEvent(
-              new CustomEvent('bob:paste-to-terminal', { detail: text })
-            )
-          }, 50)
+          // CLI is ready — write directly to PTY (no xterm dependency)
+          window.bob.writePty(text)
         } else {
           setState('terminal')
 
           // Existing session — CLI is ready, paste immediately
           setTimeout(() => {
-            window.dispatchEvent(
-              new CustomEvent('bob:paste-to-terminal', { detail: text })
-            )
+            window.bob.writePty(text)
           }, 100)
         }
       } catch (err) {
