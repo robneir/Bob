@@ -1,96 +1,57 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 
 const bob = {
-  // Settings
+  // --- Settings ---
   getSettings: () => ipcRenderer.invoke('settings:get'),
   updateSettings: (updates: Record<string, unknown>) =>
     ipcRenderer.invoke('settings:update', updates),
   openSettings: () => ipcRenderer.invoke('settings:open'),
 
-  // Widget control
+  // --- Widget ---
   resizeWidget: (height: number) => ipcRenderer.invoke('widget:resize', height),
   hideWidget: () => ipcRenderer.invoke('widget:hide'),
   showWidget: () => ipcRenderer.invoke('widget:show'),
 
-  // Audio transcription
+  // --- Audio ---
   transcribeAudio: (audioData: ArrayBuffer, sampleRate: number) =>
     ipcRenderer.invoke('audio:transcribe', audioData, sampleRate),
   loadWhisperModel: () => ipcRenderer.invoke('whisper:load'),
 
-  // Local model management
-  listModels: () => ipcRenderer.invoke('models:list'),
-  downloadModel: (modelId: string) => ipcRenderer.invoke('models:download', modelId),
-  selectModel: (modelId: string) => ipcRenderer.invoke('models:select', modelId),
-  onDownloadProgress: (
-    cb: (data: {
-      modelId: string
-      status: string
-      percent: number
-      downloadedBytes: number
-      totalBytes: number
-      error?: string
-    }) => void
-  ) => {
-    const handler = (
-      _event: IpcRendererEvent,
-      data: {
-        modelId: string
-        status: string
-        percent: number
-        downloadedBytes: number
-        totalBytes: number
-        error?: string
-      }
-    ) => cb(data)
-    ipcRenderer.on('models:download-progress', handler)
-    return () =>
-      ipcRenderer.removeListener('models:download-progress', handler)
+  // --- CLI / PTY ---
+  spawnCli: () => ipcRenderer.invoke('pty:spawn'),
+  writePty: (data: string) => ipcRenderer.invoke('pty:write', data),
+  resizePty: (cols: number, rows: number) =>
+    ipcRenderer.invoke('pty:resize', cols, rows),
+  killPty: () => ipcRenderer.invoke('pty:kill'),
+  isPtyAlive: () => ipcRenderer.invoke('pty:alive'),
+
+  onPtyData: (callback: (data: string) => void) => {
+    const handler = (_e: IpcRendererEvent, data: string) => callback(data)
+    ipcRenderer.on('pty:data', handler)
+    return () => ipcRenderer.removeListener('pty:data', handler)
+  },
+  onPtyExit: (callback: (code: number) => void) => {
+    const handler = (_e: IpcRendererEvent, code: number) => callback(code)
+    ipcRenderer.on('pty:exit', handler)
+    return () => ipcRenderer.removeListener('pty:exit', handler)
   },
 
-  // LLM
-  sendQuery: (text: string) => ipcRenderer.invoke('llm:query', text),
-  clearConversation: () => ipcRenderer.invoke('llm:clear'),
-  onStreamToken: (cb: (token: string) => void) => {
-    const handler = (_event: IpcRendererEvent, token: string) => cb(token)
-    ipcRenderer.on('llm:token', handler)
-    return () => ipcRenderer.removeListener('llm:token', handler)
-  },
-  onStreamDone: (cb: () => void) => {
-    const handler = () => cb()
-    ipcRenderer.on('llm:done', handler)
-    return () => ipcRenderer.removeListener('llm:done', handler)
-  },
-  onStreamError: (cb: (error: string) => void) => {
-    const handler = (_event: IpcRendererEvent, error: string) => cb(error)
-    ipcRenderer.on('llm:error', handler)
-    return () => ipcRenderer.removeListener('llm:error', handler)
-  },
-  onStatus: (cb: (status: { step: string; message: string; icon: string }) => void) => {
-    const handler = (_event: IpcRendererEvent, status: { step: string; message: string; icon: string }) => cb(status)
-    ipcRenderer.on('bob:status', handler)
-    return () => ipcRenderer.removeListener('bob:status', handler)
-  },
-  onSources: (cb: (sources: { title: string; url: string }[]) => void) => {
-    const handler = (_event: IpcRendererEvent, sources: { title: string; url: string }[]) => cb(sources)
-    ipcRenderer.on('bob:sources', handler)
-    return () => ipcRenderer.removeListener('bob:sources', handler)
-  },
+  // --- CLI Providers ---
+  detectProviders: () => ipcRenderer.invoke('cli:detect'),
 
-  // Recording state events from main process
-  onStateChange: (
-    cb: (state: string) => void
-  ) => {
-    const handler = (_event: IpcRendererEvent, state: string) => cb(state)
+  // --- Recording State ---
+  onStateChange: (callback: (state: string) => void) => {
+    const handler = (_e: IpcRendererEvent, state: string) => callback(state)
     ipcRenderer.on('bob:state', handler)
     return () => ipcRenderer.removeListener('bob:state', handler)
   },
-  onRecordingStart: (cb: () => void) => {
-    const handler = () => cb()
+  onRecordingStart: (callback: () => void) => {
+    const handler = () => callback()
     ipcRenderer.on('bob:recording-start', handler)
     return () => ipcRenderer.removeListener('bob:recording-start', handler)
   },
-  onRecordingStop: (cb: () => void) => {
-    const handler = () => cb()
+  onRecordingStop: (callback: () => void) => {
+    const handler = () => callback()
     ipcRenderer.on('bob:recording-stop', handler)
     return () => ipcRenderer.removeListener('bob:recording-stop', handler)
   },
@@ -98,4 +59,4 @@ const bob = {
 
 contextBridge.exposeInMainWorld('bob', bob)
 
-export type WavyAPI = typeof bob
+export type BobAPI = typeof bob
