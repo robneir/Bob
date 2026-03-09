@@ -232,6 +232,8 @@ function registerShortcuts() {
       isRecording = !isRecording
       if (isRecording) {
         widgetWindow.show()
+        widgetWindow.setFocusable(true)
+        widgetWindow.focus()
         widgetWindow.webContents.send('bob:state', 'listening')
         widgetWindow.webContents.send('bob:recording-start')
       } else {
@@ -243,6 +245,8 @@ function registerShortcuts() {
       isRecording = !isRecording
       if (isRecording) {
         widgetWindow.show()
+        widgetWindow.setFocusable(true)
+        widgetWindow.focus()
         widgetWindow.webContents.send('bob:state', 'listening')
         widgetWindow.webContents.send('bob:recording-start')
       } else {
@@ -277,6 +281,7 @@ ipcMain.handle('widget:hide', () => {
   if (widgetWindow && !widgetWindow.isDestroyed()) {
     resizeWidget(WIDGET_HEIGHT_COLLAPSED)
     widgetWindow.webContents.send('bob:state', 'idle')
+    widgetWindow.setFocusable(false)
   }
   isRecording = false
 })

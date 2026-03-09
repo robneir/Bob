@@ -296,6 +296,18 @@ export default function WidgetContainer() {
     }
   }, [resetStreamingState])
 
+  // Escape key dismisses the widget
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleDismiss()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleDismiss])
+
   const handleClear = useCallback(() => {
     setMessages([])
     setSources([])
