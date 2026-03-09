@@ -1,5 +1,5 @@
 import React from 'react'
-import { AudioLines, Mic, RotateCcw } from 'lucide-react'
+import { Minus, Mic, Plus, RotateCcw } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const INSTALL_URLS: Record<string, string> = {
@@ -75,15 +75,30 @@ interface ProviderOption {
 
 export type PillStatus = 'idle' | 'listening' | 'transcribing'
 
+const PILL_SIZES = [
+  { pill: 'px-3 py-2 gap-2.5', icon: 'h-5 w-5', alt: 'h-4 w-4', wave: 'h-5', bar: 'w-[3px]', dot: 'h-2 w-2', shortcut: 'text-[9px]' },
+  { pill: 'px-3.5 py-2.5 gap-3', icon: 'h-6 w-6', alt: 'h-5 w-5', wave: 'h-6', bar: 'w-[3px]', dot: 'h-2.5 w-2.5', shortcut: 'text-[10px]' },
+  { pill: 'px-4 py-3 gap-3', icon: 'h-8 w-8', alt: 'h-6 w-6', wave: 'h-8', bar: 'w-1', dot: 'h-3 w-3', shortcut: 'text-[10px]' },
+  { pill: 'px-5 py-3.5 gap-3.5', icon: 'h-10 w-10', alt: 'h-7 w-7', wave: 'h-10', bar: 'w-1', dot: 'h-3.5 w-3.5', shortcut: 'text-[11px]' },
+  { pill: 'px-6 py-4 gap-4', icon: 'h-12 w-12', alt: 'h-8 w-8', wave: 'h-12', bar: 'w-1.5', dot: 'h-4 w-4', shortcut: 'text-xs' },
+  { pill: 'px-7 py-5 gap-5', icon: 'h-16 w-16', alt: 'h-10 w-10', wave: 'h-16', bar: 'w-1.5', dot: 'h-5 w-5', shortcut: 'text-sm' },
+  { pill: 'px-8 py-6 gap-6', icon: 'h-20 w-20', alt: 'h-12 w-12', wave: 'h-20', bar: 'w-2', dot: 'h-6 w-6', shortcut: 'text-sm' },
+  { pill: 'px-10 py-7 gap-7', icon: 'h-24 w-24', alt: 'h-14 w-14', wave: 'h-24', bar: 'w-2', dot: 'h-7 w-7', shortcut: 'text-base' },
+  { pill: 'px-12 py-8 gap-8', icon: 'h-32 w-32', alt: 'h-16 w-16', wave: 'h-32', bar: 'w-2.5', dot: 'h-8 w-8', shortcut: 'text-base' },
+  { pill: 'px-14 py-10 gap-10', icon: 'h-40 w-40', alt: 'h-20 w-20', wave: 'h-40', bar: 'w-3', dot: 'h-10 w-10', shortcut: 'text-lg' },
+]
+
 interface IdlePillProps {
   shortcutLabel?: string
   provider?: string
   providers?: ProviderOption[]
   onProviderChange?: (id: string) => void
   onClear?: () => void
+  onSizeChange?: (size: number) => void
   ptyAlive?: boolean
   status?: PillStatus
   audioLevel?: number
+  pillSize?: number
 }
 
 export default function IdlePill({
@@ -92,155 +107,190 @@ export default function IdlePill({
   providers = [],
   onProviderChange,
   onClear,
+  onSizeChange,
   ptyAlive = false,
   status = 'idle',
   audioLevel = 0,
+  pillSize = 0,
 }: IdlePillProps) {
   const others = providers.filter((p) => p.id !== provider)
+  const sz = PILL_SIZES[pillSize] || PILL_SIZES[0]
+  const brandColor = BRAND_COLORS[provider] || '#ef4444'
+  const canGrow = pillSize < PILL_SIZES.length - 1
+  const canShrink = pillSize > 0
 
   return (
     <div className="flex flex-col items-end gap-1.5">
-      {/* Other provider icons — row above the pill */}
-      {others.length > 0 && status === 'idle' && (
+      {/* Unified pill */}
+      <div className="flex items-center">
         <motion.div
-          className="flex items-center gap-1.5 pr-1"
+          className={`flex items-center rounded-full border ${sz.pill} shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-colors cursor-grab active:cursor-grabbing overflow-hidden ${
+            status === 'listening'
+              ? 'bg-card/60'
+              : status === 'transcribing'
+              ? 'bg-card/60'
+              : 'border-border/50 bg-card/60 hover:border-border/80 hover:bg-card/80'
+          }`}
+          style={{
+            WebkitAppRegion: 'drag',
+            ...(status === 'listening' ? { borderColor: `${brandColor}4D` } : {}),
+            ...(status === 'transcribing' ? { borderColor: `${brandColor}4D` } : {}),
+          } as React.CSSProperties}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+          {/* Provider icon — always visible */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={provider}
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.5, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+            >
+              <ProviderIcon provider={provider} className={sz.icon} />
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Right side — animates between states */}
+          <AnimatePresence mode="wait">
+            {status === 'listening' ? (
+              <motion.div
+                key="listening"
+                className="flex items-center gap-2"
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+              >
+                <div className={`flex items-center gap-[3px] ${sz.wave}`}>
+                  {[0, 1, 2, 3, 4, 5, 6].map((i) => {
+                    const base = 0.25
+                    const boost = audioLevel * (0.8 + Math.sin(i * 1.2) * 0.4)
+                    const scale = Math.min(base + boost * 2.5, 1)
+                    return (
+                      <motion.div
+                        key={i}
+                        className={`${sz.bar} rounded-full`}
+                        animate={{ scaleY: scale }}
+                        transition={{ duration: 0.1, ease: 'easeOut' }}
+                        style={{ height: '100%', backgroundColor: brandColor }}
+                      />
+                    )
+                  })}
+                </div>
+              </motion.div>
+            ) : status === 'transcribing' ? (
+              <motion.div
+                key="transcribing"
+                className="flex items-center gap-1"
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+              >
+                {[0, 1, 2].map((i) => (
+                  <motion.div
+                    key={i}
+                    className={`${sz.dot} rounded-full bg-primary`}
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ duration: 0.6, repeat: Infinity, ease: 'easeInOut', delay: i * 0.1 }}
+                  />
+                ))}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="idle"
+                className="flex items-center gap-2"
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+              >
+                {/* Alternative LLM icons inside the pill */}
+                {others.map((p) => (
+                  <motion.button
+                    key={p.id}
+                    onClick={() => {
+                      if (p.installed) {
+                        onProviderChange?.(p.id)
+                      } else {
+                        window.bob?.openExternal(INSTALL_URLS[p.id] || '#')
+                      }
+                    }}
+                    className="rounded-full p-0.5 transition-colors hover:bg-white/10 cursor-pointer"
+                    style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+                    title={p.installed ? p.name : `Install ${p.name}`}
+                    whileHover={{ scale: 1.15 }}
+                    whileTap={{ scale: 0.9 }}
+                  >
+                    <ProviderIcon
+                      provider={p.id}
+                      className={`${sz.alt} ${p.installed ? 'opacity-35' : 'opacity-15'}`}
+                    />
+                  </motion.button>
+                ))}
+                {/* Clear context button — only shown when a session is active */}
+                {ptyAlive && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onClear?.()
+                    }}
+                    className="flex items-center gap-1 rounded-full bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground/60 transition-colors hover:bg-muted hover:text-muted-foreground"
+                    style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+                    title="Clear session and start fresh"
+                  >
+                    <RotateCcw className="h-2.5 w-2.5" />
+                    New
+                  </button>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </div>
+
+      {/* Bottom row: shortcut label + size controls */}
+      {status === 'idle' && (
+        <motion.div
+          className="flex items-center gap-2 pr-0.5"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
         >
-          {others.map((p) => (
-            <motion.button
-              key={p.id}
-              onClick={() => {
-                if (p.installed) {
-                  onProviderChange?.(p.id)
-                } else {
-                  window.bob?.openExternal(INSTALL_URLS[p.id] || '#')
-                }
-              }}
-              className={`rounded-full p-1 transition-colors ${
-                p.installed
-                  ? 'hover:bg-card/80 cursor-pointer'
-                  : 'cursor-pointer'
+          <span className={`${sz.shortcut} font-medium text-muted-foreground/40 whitespace-nowrap`}>
+            {shortcutLabel}
+          </span>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => canShrink && onSizeChange?.(pillSize - 1)}
+              className={`rounded p-0.5 transition-colors ${
+                canShrink
+                  ? 'text-muted-foreground/40 hover:text-muted-foreground/80 cursor-pointer'
+                  : 'text-muted-foreground/15 cursor-default'
               }`}
               style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-              title={p.installed ? p.name : `Install ${p.name}`}
-              whileHover={{ scale: 1.15 }}
-              whileTap={{ scale: 0.9 }}
+              title="Decrease pill size"
+              disabled={!canShrink}
             >
-              <ProviderIcon
-                provider={p.id}
-                className={`h-4 w-4 ${p.installed ? 'opacity-35' : 'opacity-15'}`}
-              />
-            </motion.button>
-          ))}
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => canGrow && onSizeChange?.(pillSize + 1)}
+              className={`rounded p-0.5 transition-colors ${
+                canGrow
+                  ? 'text-muted-foreground/40 hover:text-muted-foreground/80 cursor-pointer'
+                  : 'text-muted-foreground/15 cursor-default'
+              }`}
+              style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+              title="Increase pill size"
+              disabled={!canGrow}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </motion.div>
       )}
-
-      {/* Unified pill — same shape across all states */}
-      <motion.div
-        className={`flex items-center gap-2.5 rounded-full border px-3 py-2 shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-colors cursor-grab active:cursor-grabbing ${
-          status === 'listening'
-            ? 'border-red-500/30 bg-card/60'
-            : status === 'transcribing'
-            ? 'border-primary/30 bg-card/60'
-            : 'border-border/50 bg-card/60 hover:border-border/80 hover:bg-card/80'
-        }`}
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-        layout
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-      >
-        {/* Provider icon — always visible */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={provider}
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.5, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-          >
-            <ProviderIcon provider={provider} className="h-5 w-5" />
-          </motion.div>
-        </AnimatePresence>
-
-        {/* Right side — animates between states */}
-        <AnimatePresence mode="wait">
-          {status === 'listening' ? (
-            <motion.div
-              key="listening"
-              className="flex items-center gap-2"
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: 'auto' }}
-              exit={{ opacity: 0, width: 0 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-            >
-              <div className="flex items-center gap-[3px] h-5">
-                {[0, 1, 2, 3, 4, 5, 6].map((i) => {
-                  const base = 0.25
-                  const boost = audioLevel * (0.8 + Math.sin(i * 1.2) * 0.4)
-                  const scale = Math.min(base + boost * 2.5, 1)
-                  return (
-                    <motion.div
-                      key={i}
-                      className="w-[3px] rounded-full bg-red-400"
-                      animate={{ scaleY: scale }}
-                      transition={{ duration: 0.1, ease: 'easeOut' }}
-                      style={{ height: '100%' }}
-                    />
-                  )
-                })}
-              </div>
-            </motion.div>
-          ) : status === 'transcribing' ? (
-            <motion.div
-              key="transcribing"
-              className="flex items-center gap-1"
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: 'auto' }}
-              exit={{ opacity: 0, width: 0 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-            >
-              {[0, 1, 2].map((i) => (
-                <motion.div
-                  key={i}
-                  className="h-2 w-2 rounded-full bg-primary"
-                  animate={{ y: [0, -4, 0] }}
-                  transition={{ duration: 0.6, repeat: Infinity, ease: 'easeInOut', delay: i * 0.1 }}
-                />
-              ))}
-            </motion.div>
-          ) : (
-            <motion.div
-              key="idle"
-              className="flex items-center gap-2.5"
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: 'auto' }}
-              exit={{ opacity: 0, width: 0 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-            >
-              <AudioLines className="h-4 w-4 text-muted-foreground/60" />
-              <span className="text-[11px] font-medium text-muted-foreground/70 whitespace-nowrap">
-                {shortcutLabel}
-              </span>
-              {/* Clear context button — only shown when a session is active */}
-              {ptyAlive && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onClear?.()
-                  }}
-                  className="flex items-center gap-1 rounded-full bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground/60 transition-colors hover:bg-muted hover:text-muted-foreground"
-                  style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-                  title="Clear session and start fresh"
-                >
-                  <RotateCcw className="h-2.5 w-2.5" />
-                  New
-                </button>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
     </div>
   )
 }

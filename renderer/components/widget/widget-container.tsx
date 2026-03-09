@@ -50,6 +50,7 @@ export default function WidgetContainer() {
   const [shortcutLabel, setShortcutLabel] = useState(DEFAULT_SHORTCUT_LABEL)
   const [cliProvider, setCliProvider] = useState('')
   const [providers, setProviders] = useState<{ id: string; name: string; installed: boolean }[]>([])
+  const [pillSize, setPillSize] = useState(0)
   const [ptyAlive, setPtyAlive] = useState(false)
   const { startRecording, stopRecording, audioLevel } = useAudioRecorder()
   const stateRef = useRef<WidgetState>('idle')
@@ -80,6 +81,9 @@ export default function WidgetContainer() {
       }
       if (settings?.cliProvider) {
         setCliProvider(settings.cliProvider as string)
+      }
+      if (typeof settings?.pillSize === 'number') {
+        setPillSize(settings.pillSize as number)
       }
     }).catch(() => {})
     // Detect installed providers
@@ -281,6 +285,13 @@ export default function WidgetContainer() {
     }
   }, [ptyAlive])
 
+  const handleSizeChange = useCallback((size: number) => {
+    setPillSize(size)
+    if (window.bob?.updateSettings) {
+      window.bob.updateSettings({ pillSize: size })
+    }
+  }, [])
+
   // Escape key dismisses
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -308,7 +319,7 @@ export default function WidgetContainer() {
 
   return (
     <div
-      className="absolute inset-0 flex flex-col items-end justify-end pr-1 pb-1"
+      className="absolute inset-0 flex flex-col items-end justify-end pr-1 pb-1 overflow-hidden"
       onClick={handleBackgroundClick}
     >
       <div ref={contentRef}>
@@ -341,9 +352,11 @@ export default function WidgetContainer() {
                 providers={providers}
                 onProviderChange={handleProviderChange}
                 onClear={handleClear}
+                onSizeChange={handleSizeChange}
                 ptyAlive={ptyAlive}
                 status={state as 'idle' | 'listening' | 'transcribing'}
                 audioLevel={audioLevel}
+                pillSize={pillSize}
               />
             </motion.div>
           )}

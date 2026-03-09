@@ -53,8 +53,10 @@
   * {
     @apply border-border;
   }
+  html,
   body {
     @apply bg-background text-foreground;
+    overflow: hidden;
     font-family:
       "SF Pro Display",
       "Avenir Next",
