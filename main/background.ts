@@ -534,6 +534,12 @@ ipcMain.handle('llm:clear', async () => {
 
   await app.whenReady()
 
+  // Auto-select model based on RAM if no model selected
+  if (!settingsStore.get('localModel')) {
+    const { getDefaultModelId } = await import('./lib/llm/local-engine')
+    settingsStore.set('localModel', getDefaultModelId())
+  }
+
   // Create widget window
   const widget = createWidgetWindow()
   if (isProd) {

@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import os from 'os'
 
 let llama: any = null
 let model: any = null
@@ -16,51 +17,59 @@ export interface CuratedModel {
   sizeBytes: number
   uri: string
   recommended?: boolean
+  minRamGB?: number
 }
 
 export const CURATED_MODELS: CuratedModel[] = [
   {
-    id: 'llama-3.2-1b',
-    name: 'Llama 3.2 1B',
-    description: 'Ultra fast, basic quality',
-    size: '0.8 GB',
-    sizeBytes: 800_000_000,
-    uri: 'hf:bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M',
+    id: 'qwen-3.5-9b',
+    name: 'Qwen 3.5 9B',
+    description: 'Best quality, great for search and reasoning',
+    size: '6.0 GB',
+    sizeBytes: 6_000_000_000,
+    uri: 'hf:bartowski/Qwen_Qwen3.5-9B-GGUF:Q4_K_M',
+    recommended: true,
+    minRamGB: 16,
+  },
+  {
+    id: 'phi-4-mini',
+    name: 'Phi-4 Mini 3.8B',
+    description: 'Fast and capable, runs on any Mac',
+    size: '2.5 GB',
+    sizeBytes: 2_500_000_000,
+    uri: 'hf:bartowski/microsoft_Phi-4-mini-instruct-GGUF:Q4_K_M',
+    recommended: true,
+    minRamGB: 8,
+  },
+  {
+    id: 'qwen-2.5-7b',
+    name: 'Qwen 2.5 7B',
+    description: 'Proven all-rounder with strong tool calling',
+    size: '4.5 GB',
+    sizeBytes: 4_500_000_000,
+    uri: 'hf:bartowski/Qwen2.5-7B-Instruct-GGUF:Q4_K_M',
+    minRamGB: 12,
   },
   {
     id: 'llama-3.2-3b',
     name: 'Llama 3.2 3B',
-    description: 'Fast with good quality',
+    description: 'Ultra lightweight, basic quality',
     size: '2.0 GB',
     sizeBytes: 2_020_000_000,
     uri: 'hf:bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M',
-    recommended: true,
-  },
-  {
-    id: 'gemma-2-2b',
-    name: 'Gemma 2 2B',
-    description: 'Google, compact and capable',
-    size: '1.6 GB',
-    sizeBytes: 1_600_000_000,
-    uri: 'hf:bartowski/gemma-2-2b-it-GGUF:Q4_K_M',
-  },
-  {
-    id: 'phi-3.5-mini',
-    name: 'Phi 3.5 Mini',
-    description: 'Strong reasoning, compact',
-    size: '2.4 GB',
-    sizeBytes: 2_400_000_000,
-    uri: 'hf:bartowski/Phi-3.5-mini-instruct-GGUF:Q4_K_M',
-  },
-  {
-    id: 'mistral-7b',
-    name: 'Mistral 7B',
-    description: 'Best quality, needs more RAM',
-    size: '4.4 GB',
-    sizeBytes: 4_370_000_000,
-    uri: 'hf:bartowski/Mistral-7B-Instruct-v0.3-GGUF:Q4_K_M',
+    minRamGB: 8,
   },
 ]
+
+/**
+ * Get the recommended default model based on available system RAM.
+ */
+export function getDefaultModelId(): string {
+  const totalRAM = os.totalmem()
+  const ramGB = totalRAM / (1024 * 1024 * 1024)
+  if (ramGB >= 16) return 'qwen-3.5-9b'
+  return 'phi-4-mini'
+}
 
 export function getModelsDirectory(): string {
   const dir = path.join(app.getPath('userData'), 'models', 'llm')
@@ -213,6 +222,10 @@ export function clearChat(): void {
  */
 export function isModelLoaded(): boolean {
   return model !== null && context !== null
+}
+
+export function getContext() {
+  return context
 }
 
 /**
