@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Copy, X, Check, Trash2, Settings } from 'lucide-react'
 import StreamingMarkdown from './streaming-markdown'
+import StatusFeed from './status-feed'
 import type { WidgetState, ChatMessage } from './widget-container'
 
 interface ResponsePanelProps {
@@ -9,6 +10,7 @@ interface ResponsePanelProps {
   messages: ChatMessage[]
   streamingResponse: string
   shortcutLabel: string
+  currentStatus: { step: string; message: string; icon: string } | null
   onDismiss: () => void
   onClear: () => void
   onCopy: () => void
@@ -19,6 +21,7 @@ export default function ResponsePanel({
   messages,
   streamingResponse,
   shortcutLabel,
+  currentStatus,
   onDismiss,
   onClear,
   onCopy,
@@ -143,35 +146,41 @@ export default function ResponsePanel({
           {/* Thinking indicator */}
           {state === 'thinking' && !streamingResponse && (
             <div className="rounded-[18px] border border-border/40 bg-background/65 px-3 py-2.5">
-              <div className="mb-2 flex items-center gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
-                  Bob
-                </span>
-                <span className="text-[11px] text-muted-foreground">
-                  Preparing response
-                </span>
-              </div>
-              <motion.div
-                className="flex gap-1"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-              >
-                {[0, 1, 2].map((i) => (
+              {currentStatus ? (
+                <StatusFeed status={currentStatus} />
+              ) : (
+                <>
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+                      Bob
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Preparing response
+                    </span>
+                  </div>
                   <motion.div
-                    key={i}
-                    className="h-1.5 w-8 rounded-full bg-muted/80"
-                    animate={{
-                      opacity: [0.35, 1, 0.35],
-                      scaleX: [0.92, 1, 0.92],
-                    }}
-                    transition={{
-                      duration: 1.1,
-                      repeat: Infinity,
-                      delay: i * 0.15,
-                    }}
-                  />
-                ))}
-              </motion.div>
+                    className="flex gap-1"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                  >
+                    {[0, 1, 2].map((i) => (
+                      <motion.div
+                        key={i}
+                        className="h-1.5 w-8 rounded-full bg-muted/80"
+                        animate={{
+                          opacity: [0.35, 1, 0.35],
+                          scaleX: [0.92, 1, 0.92],
+                        }}
+                        transition={{
+                          duration: 1.1,
+                          repeat: Infinity,
+                          delay: i * 0.15,
+                        }}
+                      />
+                    ))}
+                  </motion.div>
+                </>
+              )}
             </div>
           )}
 

@@ -5,6 +5,7 @@ import IdlePill from './idle-pill'
 import RecordingPill from './recording-pill'
 import TranscribingPill from './transcribing-pill'
 import ResponsePanel from './response-panel'
+import StatusFeed from './status-feed'
 import ErrorDisplay from './error-display'
 
 export type WidgetState =
@@ -58,6 +59,11 @@ export default function WidgetContainer() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [streamingResponse, setStreamingResponse] = useState('')
   const [error, setError] = useState('')
+  const [currentStatus, setCurrentStatus] = useState<{
+    step: string
+    message: string
+    icon: string
+  } | null>(null)
   const [shortcutLabel, setShortcutLabel] = useState(DEFAULT_SHORTCUT_LABEL)
   const { startRecording, stopRecording, audioLevel } = useAudioRecorder()
   const stateRef = useRef<WidgetState>('idle')
@@ -158,6 +164,13 @@ export default function WidgetContainer() {
 
     const unsubState = window.bob.onStateChange((newState) => {
       setState(newState as WidgetState)
+      if (newState === 'complete' || newState === 'idle' || newState === 'error') {
+        setCurrentStatus(null)
+      }
+    })
+
+    const unsubStatus = window.bob.onStatus?.((status) => {
+      setCurrentStatus(status)
     })
 
     const unsubRecordStart = window.bob.onRecordingStart(async () => {
@@ -222,6 +235,7 @@ export default function WidgetContainer() {
 
     return () => {
       unsubState()
+      unsubStatus?.()
       unsubRecordStart()
       unsubRecordStop()
     }
@@ -355,6 +369,7 @@ export default function WidgetContainer() {
                 messages={messages}
                 streamingResponse={streamingResponse}
                 shortcutLabel={shortcutLabel}
+                currentStatus={currentStatus}
                 onDismiss={handleDismiss}
                 onClear={handleClear}
                 onCopy={handleCopy}
