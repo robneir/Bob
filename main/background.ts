@@ -67,6 +67,7 @@ function createWidgetWindow() {
     y: pos.y,
     frame: false,
     transparent: true,
+    vibrancy: 'hudWindow',
     backgroundColor: '#00000000',
     alwaysOnTop: true,
     skipTaskbar: true,

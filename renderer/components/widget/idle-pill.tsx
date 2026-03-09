@@ -13,7 +13,7 @@ export default function IdlePill({
   }
 
   return (
-    <div className="group flex items-center gap-3 rounded-[22px] border border-border/60 bg-card/92 px-3.5 py-2.5 shadow-[0_18px_42px_-26px_rgba(0,0,0,0.65)] backdrop-blur-xl transition-all hover:border-primary/20 hover:shadow-[0_22px_48px_-28px_rgba(0,0,0,0.7)]">
+    <div className="group flex items-center gap-3 rounded-[22px] border border-border/60 bg-card/60 px-3.5 py-2.5 shadow-[0_18px_42px_-26px_rgba(0,0,0,0.65)] transition-all hover:border-primary/20 hover:shadow-[0_22px_48px_-28px_rgba(0,0,0,0.7)]">
       <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-inset ring-primary/15">
         <Activity className="h-4 w-4 text-primary" />
       </div>

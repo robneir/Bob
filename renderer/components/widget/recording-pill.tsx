@@ -56,7 +56,7 @@ export default function RecordingPill({
   shortcutLabel = 'Cmd + Shift + Space',
 }: RecordingPillProps) {
   return (
-    <div className="flex min-w-[356px] items-center gap-3 rounded-[24px] border border-primary/25 bg-card/92 px-4 py-3 shadow-[0_22px_48px_-28px_rgba(0,0,0,0.68)] backdrop-blur-xl">
+    <div className="flex min-w-[356px] items-center gap-3 rounded-[24px] border border-primary/25 bg-card/60 px-4 py-3 shadow-[0_22px_48px_-28px_rgba(0,0,0,0.68)]">
       <PulsingDot />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">

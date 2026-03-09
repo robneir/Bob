@@ -29,7 +29,7 @@ export default function TranscribingPill({
   shortcutLabel = 'Cmd + Shift + Space',
 }: TranscribingPillProps) {
   return (
-    <div className="flex min-w-[356px] items-center gap-3 rounded-[24px] border border-border/50 bg-card/92 px-4 py-3 shadow-[0_22px_48px_-28px_rgba(0,0,0,0.68)] backdrop-blur-xl">
+    <div className="flex min-w-[356px] items-center gap-3 rounded-[24px] border border-border/50 bg-card/60 px-4 py-3 shadow-[0_22px_48px_-28px_rgba(0,0,0,0.68)]">
       <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-inset ring-primary/10">
         <ProcessingDots />
       </div>

@@ -60,7 +60,7 @@ export default function ResponsePanel({
   }
 
   return (
-    <div className="relative w-[404px] overflow-hidden rounded-[24px] border border-border/50 bg-card/94 shadow-[0_24px_64px_-30px_rgba(0,0,0,0.72)] backdrop-blur-xl">
+    <div className="relative w-[404px] overflow-hidden rounded-[24px] border border-border/50 bg-card/70 shadow-[0_24px_64px_-30px_rgba(0,0,0,0.72)]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.14),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(14,165,233,0.08),transparent_30%)]" />
       <div className="relative">
         {/* Header */}
