@@ -76,16 +76,16 @@ interface ProviderOption {
 export type PillStatus = 'idle' | 'listening' | 'transcribing'
 
 const PILL_SIZES = [
-  { pill: 'px-3 py-2 gap-2.5', icon: 'h-5 w-5', alt: 'h-4 w-4', wave: 'h-5', bar: 'w-[3px]', dot: 'h-2 w-2', shortcut: 'text-[9px]' },
-  { pill: 'px-3.5 py-2.5 gap-3', icon: 'h-6 w-6', alt: 'h-5 w-5', wave: 'h-6', bar: 'w-[3px]', dot: 'h-2.5 w-2.5', shortcut: 'text-[10px]' },
-  { pill: 'px-4 py-3 gap-3', icon: 'h-8 w-8', alt: 'h-6 w-6', wave: 'h-8', bar: 'w-1', dot: 'h-3 w-3', shortcut: 'text-[10px]' },
-  { pill: 'px-5 py-3.5 gap-3.5', icon: 'h-10 w-10', alt: 'h-7 w-7', wave: 'h-10', bar: 'w-1', dot: 'h-3.5 w-3.5', shortcut: 'text-[11px]' },
-  { pill: 'px-6 py-4 gap-4', icon: 'h-12 w-12', alt: 'h-8 w-8', wave: 'h-12', bar: 'w-1.5', dot: 'h-4 w-4', shortcut: 'text-xs' },
-  { pill: 'px-7 py-5 gap-5', icon: 'h-16 w-16', alt: 'h-10 w-10', wave: 'h-16', bar: 'w-1.5', dot: 'h-5 w-5', shortcut: 'text-sm' },
-  { pill: 'px-8 py-6 gap-6', icon: 'h-20 w-20', alt: 'h-12 w-12', wave: 'h-20', bar: 'w-2', dot: 'h-6 w-6', shortcut: 'text-sm' },
-  { pill: 'px-10 py-7 gap-7', icon: 'h-24 w-24', alt: 'h-14 w-14', wave: 'h-24', bar: 'w-2', dot: 'h-7 w-7', shortcut: 'text-base' },
-  { pill: 'px-12 py-8 gap-8', icon: 'h-32 w-32', alt: 'h-16 w-16', wave: 'h-32', bar: 'w-2.5', dot: 'h-8 w-8', shortcut: 'text-base' },
-  { pill: 'px-14 py-10 gap-10', icon: 'h-40 w-40', alt: 'h-20 w-20', wave: 'h-40', bar: 'w-3', dot: 'h-10 w-10', shortcut: 'text-lg' },
+  { pill: 'px-3 py-2 gap-2.5', icon: 'h-5 w-5', alt: 'h-4 w-4', wave: 'h-5', bar: 'w-[3px]', dot: 'h-2 w-2' },
+  { pill: 'px-3.5 py-2.5 gap-3', icon: 'h-6 w-6', alt: 'h-5 w-5', wave: 'h-6', bar: 'w-[3px]', dot: 'h-2.5 w-2.5' },
+  { pill: 'px-4 py-3 gap-3', icon: 'h-8 w-8', alt: 'h-6 w-6', wave: 'h-8', bar: 'w-1', dot: 'h-3 w-3' },
+  { pill: 'px-5 py-3.5 gap-3.5', icon: 'h-10 w-10', alt: 'h-7 w-7', wave: 'h-10', bar: 'w-1', dot: 'h-3.5 w-3.5' },
+  { pill: 'px-6 py-4 gap-4', icon: 'h-12 w-12', alt: 'h-8 w-8', wave: 'h-12', bar: 'w-1.5', dot: 'h-4 w-4' },
+  { pill: 'px-7 py-5 gap-5', icon: 'h-16 w-16', alt: 'h-10 w-10', wave: 'h-16', bar: 'w-1.5', dot: 'h-5 w-5' },
+  { pill: 'px-8 py-6 gap-6', icon: 'h-20 w-20', alt: 'h-12 w-12', wave: 'h-20', bar: 'w-2', dot: 'h-6 w-6' },
+  { pill: 'px-10 py-7 gap-7', icon: 'h-24 w-24', alt: 'h-14 w-14', wave: 'h-24', bar: 'w-2', dot: 'h-7 w-7' },
+  { pill: 'px-12 py-8 gap-8', icon: 'h-32 w-32', alt: 'h-16 w-16', wave: 'h-32', bar: 'w-2.5', dot: 'h-8 w-8' },
+  { pill: 'px-14 py-10 gap-10', icon: 'h-40 w-40', alt: 'h-20 w-20', wave: 'h-40', bar: 'w-3', dot: 'h-10 w-10' },
 ]
 
 interface IdlePillProps {
@@ -120,9 +120,9 @@ export default function IdlePill({
   const canShrink = pillSize > 0
 
   return (
-    <div className="flex flex-col items-end gap-1.5">
+    <div className="flex items-end gap-1.5">
       {/* Unified pill */}
-      <div className="flex items-center">
+      <div className="flex flex-col items-end">
         <motion.div
           className={`flex items-center rounded-full border ${sz.pill} shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-colors cursor-grab active:cursor-grabbing overflow-hidden ${
             status === 'listening'
@@ -250,45 +250,40 @@ export default function IdlePill({
         </motion.div>
       </div>
 
-      {/* Bottom row: shortcut label + size controls */}
+      {/* Size controls — stacked vertically to the right, fixed size */}
       {status === 'idle' && (
         <motion.div
-          className="flex items-center gap-2 pr-0.5"
+          className="flex flex-col items-center self-end"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
         >
-          <span className={`${sz.shortcut} font-medium text-muted-foreground/40 whitespace-nowrap`}>
-            {shortcutLabel}
-          </span>
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={() => canShrink && onSizeChange?.(pillSize - 1)}
-              className={`rounded p-0.5 transition-colors ${
-                canShrink
-                  ? 'text-muted-foreground/40 hover:text-muted-foreground/80 cursor-pointer'
-                  : 'text-muted-foreground/15 cursor-default'
-              }`}
-              style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-              title="Decrease pill size"
-              disabled={!canShrink}
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => canGrow && onSizeChange?.(pillSize + 1)}
-              className={`rounded p-0.5 transition-colors ${
-                canGrow
-                  ? 'text-muted-foreground/40 hover:text-muted-foreground/80 cursor-pointer'
-                  : 'text-muted-foreground/15 cursor-default'
-              }`}
-              style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-              title="Increase pill size"
-              disabled={!canGrow}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          <button
+            onClick={() => canGrow && onSizeChange?.(pillSize + 1)}
+            className={`p-0.5 rounded transition-colors ${
+              canGrow
+                ? 'text-muted-foreground/40 hover:text-muted-foreground/80 cursor-pointer'
+                : 'text-muted-foreground/15 cursor-default'
+            }`}
+            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+            title="Increase pill size"
+            disabled={!canGrow}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => canShrink && onSizeChange?.(pillSize - 1)}
+            className={`p-0.5 rounded transition-colors ${
+              canShrink
+                ? 'text-muted-foreground/40 hover:text-muted-foreground/80 cursor-pointer'
+                : 'text-muted-foreground/15 cursor-default'
+            }`}
+            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+            title="Decrease pill size"
+            disabled={!canShrink}
+          >
+            <Minus className="h-3.5 w-3.5" />
+          </button>
         </motion.div>
       )}
     </div>
