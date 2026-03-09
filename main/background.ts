@@ -326,7 +326,7 @@ ipcMain.handle('whisper:load', async () => {
 // --- CLI / PTY ---
 
 ipcMain.handle('pty:spawn', async (event) => {
-  const { spawnCli } = await import('./lib/cli/pty-manager')
+  const { spawnCli, writeToPty } = await import('./lib/cli/pty-manager')
   const { CLI_PROVIDERS } = await import('./lib/cli/providers')
   const sender = event.sender
 
@@ -338,9 +338,45 @@ ipcMain.handle('pty:spawn', async (event) => {
 
   const pty = spawnCli(provider.command)
 
+  let earlyOutput = ''
+  let trustHandled = false
+  let readySignaled = false
+  let readyTimer: ReturnType<typeof setTimeout> | null = null
+
   pty.onData((data) => {
     if (!sender.isDestroyed()) sender.send('pty:data', data)
+
+    // During startup: auto-handle trust prompts and detect readiness
+    if (!readySignaled) {
+      earlyOutput += data
+
+      // Auto-accept Claude Code trust prompt
+      if (
+        !trustHandled &&
+        providerId === 'claude' &&
+        /trust.*(?:folder|directory|files)/i.test(earlyOutput)
+      ) {
+        trustHandled = true
+        earlyOutput = ''
+        setTimeout(() => writeToPty('y\n'), 150)
+      }
+
+      // Signal ready when output settles (no new data for 800ms)
+      if (readyTimer) clearTimeout(readyTimer)
+      readyTimer = setTimeout(() => {
+        readySignaled = true
+        if (!sender.isDestroyed()) sender.send('pty:ready')
+      }, 800)
+    }
   })
+
+  // Fallback: signal ready after 10 seconds regardless
+  setTimeout(() => {
+    if (!readySignaled) {
+      readySignaled = true
+      if (!sender.isDestroyed()) sender.send('pty:ready')
+    }
+  }, 10000)
 
   pty.onExit(({ exitCode }) => {
     if (!sender.isDestroyed()) sender.send('pty:exit', exitCode)

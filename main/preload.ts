@@ -35,6 +35,11 @@ const bob = {
     ipcRenderer.on('pty:exit', handler)
     return () => ipcRenderer.removeListener('pty:exit', handler)
   },
+  onPtyReady: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('pty:ready', handler)
+    return () => ipcRenderer.removeListener('pty:ready', handler)
+  },
 
   // --- CLI Providers ---
   detectProviders: () => ipcRenderer.invoke('cli:detect'),
