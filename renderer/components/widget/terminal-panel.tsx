@@ -150,7 +150,7 @@ export default function TerminalPanel({
   }, [])
 
   return (
-    <div className="relative w-[640px] overflow-hidden rounded-[16px] border border-border/50 bg-card/80 shadow-[0_24px_64px_-30px_rgba(0,0,0,0.72)]">
+    <div className="relative w-[640px] overflow-hidden rounded-[16px] border border-border/50 bg-card/50 backdrop-blur-xl shadow-[0_24px_64px_-30px_rgba(0,0,0,0.72)]">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/30 px-3 py-2">
         <div className="flex items-center gap-2">

@@ -230,13 +230,27 @@ export default function WidgetContainer() {
     return () => window.removeEventListener('keydown', onKey)
   }, [handleDismiss])
 
+  // Click outside the panel dismisses
+  const handleBackgroundClick = useCallback(
+    (e: React.MouseEvent) => {
+      // Only dismiss if clicking directly on the background, not on panel content
+      if (e.target === e.currentTarget && state === 'terminal') {
+        handleDismiss()
+      }
+    },
+    [state, handleDismiss]
+  )
+
   // Show terminal when PTY is alive and we're in terminal/listening/transcribing
   const terminalActive = ptyAlive && (state === 'terminal' || state === 'listening' || state === 'transcribing')
   // Only show standalone pills when terminal is NOT active
   const showPills = !terminalActive
 
   return (
-    <div className="absolute bottom-0 right-0 flex flex-col items-end justify-end p-2">
+    <div
+      className="absolute inset-0 flex flex-col items-end justify-end p-2"
+      onClick={handleBackgroundClick}
+    >
       <div ref={contentRef}>
         {/* Terminal panel — stays mounted while PTY is alive to preserve xterm state */}
         {ptyAlive && (
