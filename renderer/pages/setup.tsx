@@ -88,7 +88,7 @@ export default function SetupPage() {
         <title>Bob Setup</title>
       </Head>
       <div className="h-screen bg-background flex flex-col overflow-hidden select-none">
-        <div className="h-8 shrink-0" style={{ WebkitAppRegion: 'drag' } as any} />
+        <div className="h-14 shrink-0" style={{ WebkitAppRegion: 'drag' } as any} />
 
         {/* Step indicator */}
         <div className="flex justify-center gap-1.5 py-3">

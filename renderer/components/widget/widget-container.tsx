@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAudioRecorder } from '../../hooks/use-audio-recorder'
 import IdlePill from './idle-pill'
-import RecordingPill from './recording-pill'
-import TranscribingPill from './transcribing-pill'
 import TerminalPanel from './terminal-panel'
 import ErrorDisplay from './error-display'
 
@@ -14,7 +12,7 @@ export type WidgetState =
   | 'terminal'
   | 'error'
 
-const WIDGET_PADDING = 16
+const WIDGET_PADDING = 8
 const DEFAULT_SHORTCUT_LABEL = 'Cmd + Shift + Space'
 
 function formatShortcutLabel(shortcut: string) {
@@ -50,6 +48,8 @@ export default function WidgetContainer() {
   const [state, setState] = useState<WidgetState>('idle')
   const [error, setError] = useState('')
   const [shortcutLabel, setShortcutLabel] = useState(DEFAULT_SHORTCUT_LABEL)
+  const [cliProvider, setCliProvider] = useState('')
+  const [providers, setProviders] = useState<{ id: string; name: string; installed: boolean }[]>([])
   const [ptyAlive, setPtyAlive] = useState(false)
   const { startRecording, stopRecording, audioLevel } = useAudioRecorder()
   const stateRef = useRef<WidgetState>('idle')
@@ -78,14 +78,27 @@ export default function WidgetContainer() {
       if (typeof shortcut === 'string' && shortcut) {
         setShortcutLabel(formatShortcutLabel(shortcut))
       }
+      if (settings?.cliProvider) {
+        setCliProvider(settings.cliProvider as string)
+      }
     }).catch(() => {})
+    // Detect installed providers
+    if (window.bob?.detectProviders) {
+      window.bob.detectProviders().then((list: any[]) => {
+        if (cancelled) return
+        setProviders(list)
+      }).catch(() => {})
+    }
     return () => { cancelled = true }
   }, [])
 
-  // Resize widget to fit content
+  // Resize widget to fit content (debounced to avoid feedback loops)
   useEffect(() => {
     if (!contentRef.current || !window.bob?.resizeWidget) return
     const maxHeight = Math.floor(window.screen.availHeight - 32)
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null
+    let lastW = 0
+    let lastH = 0
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -96,12 +109,28 @@ export default function WidgetContainer() {
           Math.ceil(contentHeight) + WIDGET_PADDING,
           maxHeight
         )
-        window.bob.resizeWidget(totalHeight)
+        const contentWidth = entry.borderBoxSize?.[0]?.inlineSize
+          ?? entry.target.getBoundingClientRect().width
+        const newW = Math.ceil(contentWidth) + WIDGET_PADDING
+        const newH = totalHeight
+
+        // Skip if dimensions haven't meaningfully changed (avoid feedback loop)
+        if (Math.abs(newW - lastW) < 2 && Math.abs(newH - lastH) < 2) return
+        lastW = newW
+        lastH = newH
+
+        if (resizeTimer) clearTimeout(resizeTimer)
+        resizeTimer = setTimeout(() => {
+          window.bob.resizeWidget(newH, newW)
+        }, 50)
       }
     })
 
     observer.observe(contentRef.current)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (resizeTimer) clearTimeout(resizeTimer)
+    }
   }, [])
 
   // Listen for state changes and recording events from main process
@@ -116,7 +145,10 @@ export default function WidgetContainer() {
       try {
         setError('')
         await startRecording()
-      } catch {
+      } catch (err) {
+        // On a fast double-tap, stopRecording races with startRecording.
+        // If the state already moved past 'listening', treat it as a benign interruption.
+        if (stateRef.current !== 'listening') return
         setError('Microphone access denied. Please allow microphone access in System Settings.')
         setState('error')
       }
@@ -126,24 +158,63 @@ export default function WidgetContainer() {
       try {
         const audioData = await stopRecording()
 
-        // Too short — ignore
-        if (audioData.length < 1600) {
-          const alive = await window.bob.isPtyAlive()
-          if (alive) {
-            setState('terminal')
-          } else {
-            setState('idle')
-            window.bob.hideWidget()
-          }
+        // Compute audio stats for diagnostics and checks
+        const samples = audioData.length
+        const durationMs = Math.round((samples / 16000) * 1000)
+        let sumSq = 0
+        for (let i = 0; i < samples; i++) {
+          sumSq += audioData[i] * audioData[i]
+        }
+        const rms = Math.sqrt(sumSq / (samples || 1))
+
+        console.log(`[Bob] Audio: ${samples} samples, ${durationMs}ms, RMS=${rms.toFixed(4)}`)
+
+        // Too short — treat as dismiss gesture (quick double-tap)
+        // ~100ms at 16kHz
+        if (samples < 1600) {
+          console.log('[Bob] Dismissed: too short (double-tap)')
+          handleDismiss()
+          return
+        }
+
+        // Only dismiss for true silence — very low threshold to avoid
+        // false positives with quiet speakers or low-gain mics
+        if (rms < 0.003) {
+          console.log('[Bob] Dismissed: silence detected')
+          handleDismiss()
           return
         }
 
         setState('transcribing')
 
-        const result = await window.bob.transcribeAudio(
+        // Start transcription and CLI spawn in parallel.
+        // If the CLI isn't running yet, spawning it while Whisper works
+        // means zero wait time after transcription completes.
+        const transcriptionPromise = window.bob.transcribeAudio(
           audioData.buffer as ArrayBuffer,
           16000
         )
+
+        let spawnPromise: Promise<void> | null = null
+        const alreadyAlive = await window.bob.isPtyAlive()
+        if (!alreadyAlive) {
+          const readyPromise = new Promise<void>((resolve) => {
+            const unsub = window.bob.onPtyReady(() => {
+              unsub()
+              resolve()
+            })
+            setTimeout(() => { unsub(); resolve() }, 12000)
+          })
+
+          spawnPromise = window.bob.spawnCli().then(() => {
+            setPtyAlive(true)
+            setState('terminal')
+            return readyPromise
+          })
+        }
+
+        const result = await transcriptionPromise
+        console.log('[Bob] Transcription result:', result.success, result.text?.slice(0, 80))
 
         if (!result.success) {
           setError(result.error || 'Transcription failed')
@@ -153,50 +224,22 @@ export default function WidgetContainer() {
 
         const text = result.text?.trim()
         if (!text) {
-          const alive = await window.bob.isPtyAlive()
-          if (alive) {
-            setState('terminal')
-          } else {
-            setState('idle')
-            window.bob.hideWidget()
-          }
+          console.log('[Bob] Dismissed: transcription returned empty text')
+          handleDismiss()
           return
         }
 
-        // Ensure CLI is spawned, then paste text into terminal
-        const alive = await window.bob.isPtyAlive()
-        if (!alive) {
-          // Set up ready listener before spawning
-          const readyPromise = new Promise<void>((resolve) => {
-            const unsub = window.bob.onPtyReady(() => {
-              unsub()
-              resolve()
-            })
-            // Safety fallback
-            setTimeout(() => { unsub(); resolve() }, 12000)
-          })
-
-          await window.bob.spawnCli()
-          setPtyAlive(true)
-          setState('terminal')
-
-          // Wait for CLI to finish startup (trust prompts, loading, etc.)
-          await readyPromise
-
-          // CLI is ready — write directly to PTY (no xterm dependency)
+        // Wait for CLI to be ready (instant if already running or spawn finished during transcription)
+        if (spawnPromise) {
+          await spawnPromise
           window.bob.writePty(text)
-          // Focus terminal once xterm has loaded
           setTimeout(() => {
             window.dispatchEvent(new CustomEvent('bob:focus-terminal'))
-          }, 300)
+          }, 150)
         } else {
           setState('terminal')
-
-          // Existing session — CLI is ready, paste immediately
-          setTimeout(() => {
-            window.bob.writePty(text)
-            window.dispatchEvent(new CustomEvent('bob:focus-terminal'))
-          }, 100)
+          window.bob.writePty(text)
+          window.dispatchEvent(new CustomEvent('bob:focus-terminal'))
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Recording failed')
@@ -226,6 +269,18 @@ export default function WidgetContainer() {
     setState('idle')
   }, [])
 
+  const handleProviderChange = useCallback((id: string) => {
+    setCliProvider(id)
+    if (window.bob?.updateSettings) {
+      window.bob.updateSettings({ cliProvider: id })
+    }
+    // Kill existing PTY so the next recording spawns with the new provider
+    if (ptyAlive && window.bob) {
+      window.bob.killPty()
+      setPtyAlive(false)
+    }
+  }, [ptyAlive])
+
   // Escape key dismisses
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -253,7 +308,7 @@ export default function WidgetContainer() {
 
   return (
     <div
-      className="absolute inset-0 flex flex-col items-end justify-end p-2"
+      className="absolute inset-0 flex flex-col items-end justify-end pr-1 pb-1"
       onClick={handleBackgroundClick}
     >
       <div ref={contentRef}>
@@ -266,47 +321,30 @@ export default function WidgetContainer() {
               onClear={handleClear}
               visible={terminalActive}
               status={state === 'listening' ? 'listening' : state === 'transcribing' ? 'transcribing' : 'terminal'}
+              audioLevel={audioLevel}
             />
           </div>
         )}
 
         <AnimatePresence mode="wait">
-          {state === 'idle' && (
+          {showPills && (state === 'idle' || state === 'listening' || state === 'transcribing') && (
             <motion.div
-              key="idle"
+              key="pill"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.15 }}
             >
-              <IdlePill shortcutLabel={shortcutLabel} />
-            </motion.div>
-          )}
-
-          {showPills && state === 'listening' && (
-            <motion.div
-              key="listening"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.15 }}
-            >
-              <RecordingPill
-                audioLevel={audioLevel}
+              <IdlePill
                 shortcutLabel={shortcutLabel}
+                provider={cliProvider}
+                providers={providers}
+                onProviderChange={handleProviderChange}
+                onClear={handleClear}
+                ptyAlive={ptyAlive}
+                status={state as 'idle' | 'listening' | 'transcribing'}
+                audioLevel={audioLevel}
               />
-            </motion.div>
-          )}
-
-          {showPills && state === 'transcribing' && (
-            <motion.div
-              key="transcribing"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.15 }}
-            >
-              <TranscribingPill shortcutLabel={shortcutLabel} />
             </motion.div>
           )}
 

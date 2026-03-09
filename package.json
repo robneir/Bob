@@ -3,8 +3,8 @@
   "name": "bob",
   "description": "Voice-activated AI assistant - press a shortcut, speak, get answers",
   "version": "0.1.0",
-  "author": "Bob Contributors",
-  "license": "MIT",
+  "author": "Robert Neir",
+  "license": "SEE LICENSE IN LICENSE",
   "main": "app/background.js",
   "scripts": {
     "dev": "nextron",

@@ -1,21 +1,28 @@
-MIT License
+Copyright (c) 2025 Robert Neir. All rights reserved.
 
-Copyright (c) 2024 Wavy Contributors
+TERMS AND CONDITIONS
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. GRANT OF LICENSE
+   You are granted a limited, non-exclusive, non-transferable license to:
+   - View, study, and learn from the source code
+   - Use the software for personal, non-commercial purposes
+   - Fork and modify the software for personal, non-commercial use
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. RESTRICTIONS
+   You may NOT, without prior written permission from the copyright holder:
+   - Sell, sublicense, or commercially distribute the software or any derivative works
+   - Use the software or any substantial portion of it in a commercial product or service
+   - Offer the software as a hosted or managed service (SaaS)
+   - Remove or alter this license or any copyright notices
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+3. CONTRIBUTIONS
+   By submitting contributions (pull requests, patches, etc.) to this project,
+   you grant the copyright holder a perpetual, irrevocable, worldwide license
+   to use, modify, and distribute your contributions under these same terms.
+
+4. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM,
+   DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
+
+For commercial licensing inquiries, contact the copyright holder.

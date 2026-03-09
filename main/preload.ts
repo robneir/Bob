@@ -8,9 +8,12 @@ const bob = {
   openSettings: () => ipcRenderer.invoke('settings:open'),
 
   // --- Widget ---
-  resizeWidget: (height: number) => ipcRenderer.invoke('widget:resize', height),
+  resizeWidget: (height: number, width?: number) => ipcRenderer.invoke('widget:resize', height, width),
   hideWidget: () => ipcRenderer.invoke('widget:hide'),
   showWidget: () => ipcRenderer.invoke('widget:show'),
+  focusWidget: () => ipcRenderer.invoke('widget:focus'),
+  unfocusWidget: () => ipcRenderer.invoke('widget:unfocus'),
+  openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url),
 
   // --- Audio ---
   transcribeAudio: (audioData: ArrayBuffer, sampleRate: number) =>

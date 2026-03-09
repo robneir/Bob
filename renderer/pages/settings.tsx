@@ -22,7 +22,7 @@ interface ProviderInfo {
 
 const INSTALL_URLS: Record<string, string> = {
   claude: 'https://docs.anthropic.com/en/docs/claude-code/overview',
-  openai: 'https://platform.openai.com/docs/guides/cli',
+  openai: 'https://codex.openai.com',
   gemini: 'https://ai.google.dev/gemini-api/docs/ai-studio-quickstart',
   ollama: 'https://ollama.com/download',
 }
@@ -101,13 +101,13 @@ export default function SettingsPage() {
         {/* Sidebar */}
         <div className="w-52 bg-card border-r border-border flex flex-col">
           <div
-            className="h-12 flex items-end px-4 pb-2"
+            className="h-14 flex items-end pl-[78px] pb-2"
             style={{ WebkitAppRegion: 'drag' } as any}
           >
             <span className="text-sm font-bold text-foreground">Settings</span>
           </div>
 
-          <nav className="flex-1 px-2 py-3 space-y-1">
+          <nav className="flex-1 px-2 py-1 space-y-1">
             {navItems.map((item) => (
               <button
                 key={item.id}
@@ -128,7 +128,7 @@ export default function SettingsPage() {
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-background">
           <div
-            className="h-12"
+            className="h-14"
             style={{ WebkitAppRegion: 'drag' } as any}
           />
 

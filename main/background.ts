@@ -4,6 +4,7 @@ import {
   app,
   ipcMain,
   globalShortcut,
+  shell,
   Tray,
   Menu,
   nativeImage,
@@ -31,6 +32,9 @@ const settingsStore = new Store({
     whisperModel: 'base',
     setupComplete: false,
     theme: 'dark' as string,
+    terminalWidth: 640,
+    terminalHeight: 500,
+    terminalOpacity: 50,
   },
 })
 
@@ -68,7 +72,7 @@ function createWidgetWindow() {
     skipTaskbar: true,
     resizable: false,
     movable: false,
-    focusable: false,
+    focusable: true,
     hasShadow: false,
     roundedCorners: false,
     show: false,
@@ -117,14 +121,20 @@ function createSettingsWindow() {
   return settingsWindow
 }
 
-function resizeWidget(height: number) {
+function resizeWidget(height: number, width?: number) {
   if (!widgetWindow || widgetWindow.isDestroyed()) return
-  const display = screen.getPrimaryDisplay()
-  const { width, height: screenHeight } = display.workAreaSize
+
+  // Preserve user's dragged position — keep the bottom-right edge anchored
+  const [currentX, currentY] = widgetWindow.getPosition()
+  const [currentWidth, currentHeight] = widgetWindow.getSize()
+  const currentBottom = currentY + currentHeight
+  const currentRight = currentX + currentWidth
+  const newWidth = width ?? currentWidth
+
   widgetWindow.setBounds({
-    x: width - WIDGET_WIDTH - WIDGET_MARGIN,
-    y: screenHeight - height - WIDGET_MARGIN,
-    width: WIDGET_WIDTH,
+    x: currentRight - newWidth,
+    y: currentBottom - height,
+    width: newWidth,
     height: height,
   })
 }
@@ -261,15 +271,14 @@ ipcMain.handle('settings:update', (_event, updates: Record<string, unknown>) => 
   return settingsStore.store
 })
 
-ipcMain.handle('widget:resize', (_event, height: number) => {
-  resizeWidget(height)
+ipcMain.handle('widget:resize', (_event, height: number, width?: number) => {
+  resizeWidget(height, width)
 })
 
 ipcMain.handle('widget:hide', () => {
   if (widgetWindow && !widgetWindow.isDestroyed()) {
     resizeWidget(WIDGET_HEIGHT_COLLAPSED)
     widgetWindow.webContents.send('bob:state', 'idle')
-    widgetWindow.setFocusable(false)
   }
   isRecording = false
 })
@@ -281,8 +290,25 @@ ipcMain.handle('widget:show', () => {
   }
 })
 
+ipcMain.handle('widget:focus', () => {
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.setFocusable(true)
+    widgetWindow.focus()
+  }
+})
+
+ipcMain.handle('widget:unfocus', () => {
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.setFocusable(false)
+  }
+})
+
 ipcMain.handle('settings:open', () => {
   openSettings()
+})
+
+ipcMain.handle('shell:open-external', (_event, url: string) => {
+  shell.openExternal(url)
 })
 
 // --- Audio / Whisper ---
