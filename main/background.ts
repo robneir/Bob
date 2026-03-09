@@ -441,7 +441,7 @@ ipcMain.handle('llm:query', async (event, text: string) => {
 
     if (provider === 'local') {
       // Use bundled local model via node-llama-cpp with agentic search tools
-      const { loadModel, getContext } = await import('./lib/llm/local-engine')
+      const { loadModel, getContext, clearChat } = await import('./lib/llm/local-engine')
       const { createSearchTools, SEARCH_SYSTEM_PROMPT } = await import(
         './lib/search/search-pipeline'
       )
@@ -458,6 +458,9 @@ ipcMain.handle('llm:query', async (event, text: string) => {
       }
 
       await loadModel(modelPath)
+
+      // Free any existing session's sequence before creating a new one
+      clearChat()
 
       // Dynamic import that bypasses webpack bundling (ESM-only module)
       const importNodeLlama = () =>
@@ -481,19 +484,24 @@ ipcMain.handle('llm:query', async (event, text: string) => {
       emitStatus(sender, 'thinking')
 
       let hasStartedStreaming = false
-      await agentSession.prompt(text, {
-        functions,
-        onTextChunk(chunk: string) {
-          if (!hasStartedStreaming) {
-            hasStartedStreaming = true
-            emitStatus(sender, 'answering')
-            sender.send('bob:state', 'streaming')
-          }
-          if (!sender.isDestroyed()) {
-            sender.send('llm:token', chunk)
-          }
-        },
-      })
+      try {
+        await agentSession.prompt(text, {
+          functions,
+          onTextChunk(chunk: string) {
+            if (!hasStartedStreaming) {
+              hasStartedStreaming = true
+              emitStatus(sender, 'answering')
+              sender.send('bob:state', 'streaming')
+            }
+            if (!sender.isDestroyed()) {
+              sender.send('llm:token', chunk)
+            }
+          },
+        })
+      } finally {
+        // Dispose the agent session's sequence so it's available for the next query
+        try { agentSession.contextSequence?.dispose() } catch {}
+      }
 
       // Send collected sources to the renderer
       if (sources.length > 0) {
