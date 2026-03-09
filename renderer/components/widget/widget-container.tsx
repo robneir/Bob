@@ -50,6 +50,7 @@ export default function WidgetContainer() {
   const [state, setState] = useState<WidgetState>('idle')
   const [error, setError] = useState('')
   const [shortcutLabel, setShortcutLabel] = useState(DEFAULT_SHORTCUT_LABEL)
+  const [ptyAlive, setPtyAlive] = useState(false)
   const { startRecording, stopRecording, audioLevel } = useAudioRecorder()
   const stateRef = useRef<WidgetState>('idle')
   const contentRef = useRef<HTMLDivElement>(null)
@@ -57,6 +58,15 @@ export default function WidgetContainer() {
   useEffect(() => {
     stateRef.current = state
   }, [state])
+
+  // Track PTY exit to unmount terminal
+  useEffect(() => {
+    if (!window.bob) return
+    const unsub = window.bob.onPtyExit(() => {
+      setPtyAlive(false)
+    })
+    return () => unsub()
+  }, [])
 
   // Load shortcut label from settings
   useEffect(() => {
@@ -157,16 +167,18 @@ export default function WidgetContainer() {
         const alive = await window.bob.isPtyAlive()
         if (!alive) {
           await window.bob.spawnCli()
+          setPtyAlive(true)
         }
 
         setState('terminal')
 
         // Small delay to let terminal mount, then paste
+        // Longer delay for fresh spawn (xterm needs to load), short for existing session
         setTimeout(() => {
           window.dispatchEvent(
             new CustomEvent('bob:paste-to-terminal', { detail: text })
           )
-        }, alive ? 50 : 500)
+        }, alive ? 100 : 600)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Recording failed')
         setState('error')
@@ -187,6 +199,7 @@ export default function WidgetContainer() {
 
   const handleClear = useCallback(() => {
     setError('')
+    setPtyAlive(false)
     if (window.bob) {
       window.bob.killPty()
       window.bob.hideWidget()
@@ -203,9 +216,23 @@ export default function WidgetContainer() {
     return () => window.removeEventListener('keydown', onKey)
   }, [handleDismiss])
 
+  const showTerminal = state === 'terminal'
+
   return (
     <div className="absolute bottom-0 right-0 flex flex-col items-end justify-end p-2">
       <div ref={contentRef}>
+        {/* Terminal panel — stays mounted while PTY is alive to preserve xterm state */}
+        {ptyAlive && (
+          <div className={showTerminal ? '' : 'hidden'}>
+            <TerminalPanel
+              shortcutLabel={shortcutLabel}
+              onDismiss={handleDismiss}
+              onClear={handleClear}
+              visible={showTerminal}
+            />
+          </div>
+        )}
+
         <AnimatePresence mode="wait">
           {state === 'idle' && (
             <motion.div
@@ -243,22 +270,6 @@ export default function WidgetContainer() {
               transition={{ duration: 0.15 }}
             >
               <TranscribingPill shortcutLabel={shortcutLabel} />
-            </motion.div>
-          )}
-
-          {state === 'terminal' && (
-            <motion.div
-              key="terminal"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            >
-              <TerminalPanel
-                shortcutLabel={shortcutLabel}
-                onDismiss={handleDismiss}
-                onClear={handleClear}
-              />
             </motion.div>
           )}
 

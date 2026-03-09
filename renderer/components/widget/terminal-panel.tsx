@@ -5,17 +5,28 @@ interface TerminalPanelProps {
   shortcutLabel: string
   onDismiss: () => void
   onClear: () => void
+  visible?: boolean
 }
 
 export default function TerminalPanel({
   shortcutLabel,
   onDismiss,
   onClear,
+  visible = true,
 }: TerminalPanelProps) {
   const termRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<any>(null)
   const fitRef = useRef<any>(null)
   const [ready, setReady] = useState(false)
+
+  // Re-fit terminal when becoming visible again
+  useEffect(() => {
+    if (visible && fitRef.current) {
+      requestAnimationFrame(() => {
+        fitRef.current?.fit()
+      })
+    }
+  }, [visible])
 
   useEffect(() => {
     if (!termRef.current || xtermRef.current) return
