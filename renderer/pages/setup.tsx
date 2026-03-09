@@ -1,95 +1,75 @@
 import React, { useState, useEffect } from 'react'
 import Head from 'next/head'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Loader2 } from 'lucide-react'
+import { Check, Search, ExternalLink } from 'lucide-react'
 
-type Step = 'welcome' | 'downloading' | 'done'
+type Step = 'welcome' | 'detect' | 'done'
 
-interface ModelInfo {
+interface ProviderInfo {
   id: string
   name: string
-  size: string
-  recommended?: boolean
-  downloaded?: boolean
+  command: string
+  primary: boolean
+  installed: boolean
 }
 
 export default function SetupPage() {
   const [step, setStep] = useState<Step>('welcome')
   const [direction, setDirection] = useState(1)
-  const [modelName, setModelName] = useState('')
-  const [downloadPercent, setDownloadPercent] = useState(0)
+  const [providers, setProviders] = useState<ProviderInfo[]>([])
+  const [selectedProvider, setSelectedProvider] = useState('')
   const [shortcutLabel, setShortcutLabel] = useState('Cmd+Shift+Space')
 
-  // Detect platform for shortcut display
   useEffect(() => {
     if (typeof navigator !== 'undefined' && !navigator.platform?.includes('Mac')) {
       setShortcutLabel('Ctrl+Shift+Space')
     }
   }, [])
 
-  // Listen for download progress
+  // Detect CLIs when entering detect step
   useEffect(() => {
-    if (!window.bob?.onDownloadProgress) return
-    const unsub = window.bob.onDownloadProgress((data) => {
-      if (data.status === 'downloading') {
-        setDownloadPercent(data.percent ?? 0)
-      } else if (data.status === 'complete') {
-        setDownloadPercent(100)
-        setTimeout(() => {
-          setDirection(1)
-          setStep('done')
-        }, 600)
-      } else if (data.status === 'error') {
-        // On error, stay on downloading step so user can see something went wrong
-        setDownloadPercent(0)
-      }
-    })
-    return () => { unsub() }
-  }, [])
+    if (step !== 'detect') return
 
-  // Auto-start download when entering the downloading step
-  useEffect(() => {
-    if (step !== 'downloading') return
-
-    const startDownload = async () => {
-      if (!window.bob?.listModels) return
+    const detect = async () => {
+      if (!window.bob?.detectProviders) return
       try {
-        const result = await window.bob.listModels()
-        if (!result.success) return
+        const result = await window.bob.detectProviders()
+        setProviders(result)
 
-        const models: ModelInfo[] = result.models
-        // Use the auto-selected model, or the recommended one, or the first
-        const targetId =
-          result.selectedModel ||
-          models.find((m) => m.recommended)?.id ||
-          models[0]?.id
+        // Auto-select first installed primary provider
+        const installed = result.filter((p: ProviderInfo) => p.installed)
+        const primary = installed.find((p: ProviderInfo) => p.primary)
+        const autoSelect = primary?.id ?? installed[0]?.id ?? ''
 
-        if (!targetId) return
-
-        const target = models.find((m) => m.id === targetId)
-        setModelName(target?.name ?? targetId)
-
-        // If already downloaded, skip straight to done
-        if (target?.downloaded) {
-          setDirection(1)
-          setStep('done')
-          return
+        if (autoSelect) {
+          setSelectedProvider(autoSelect)
+          await window.bob.updateSettings({ cliProvider: autoSelect })
         }
-
-        await window.bob.downloadModel(targetId)
-      } catch {
-        // Download progress listener will handle status updates
-      }
+      } catch {}
     }
 
-    startDownload()
+    detect()
   }, [step])
 
   const finishSetup = async () => {
     if (window.bob) {
-      await window.bob.updateSettings({ setupComplete: true })
+      if (selectedProvider) {
+        await window.bob.updateSettings({
+          cliProvider: selectedProvider,
+          setupComplete: true,
+        })
+      } else {
+        await window.bob.updateSettings({ setupComplete: true })
+      }
     }
     window.close()
+  }
+
+  const selectProvider = async (id: string) => {
+    setSelectedProvider(id)
+    if (window.bob) {
+      await window.bob.updateSettings({ cliProvider: id })
+    }
   }
 
   const slideVariants = {
@@ -98,8 +78,9 @@ export default function SetupPage() {
     exit: (dir: number) => ({ x: dir > 0 ? -40 : 40, opacity: 0 }),
   }
 
-  const STEPS: Step[] = ['welcome', 'downloading', 'done']
+  const STEPS: Step[] = ['welcome', 'detect', 'done']
   const currentIndex = STEPS.indexOf(step)
+  const hasInstalledProvider = providers.some((p) => p.installed)
 
   return (
     <>
@@ -107,7 +88,6 @@ export default function SetupPage() {
         <title>Bob Setup</title>
       </Head>
       <div className="h-screen bg-background flex flex-col overflow-hidden select-none">
-        {/* Titlebar drag region */}
         <div className="h-8 shrink-0" style={{ WebkitAppRegion: 'drag' } as any} />
 
         {/* Step indicator */}
@@ -122,7 +102,7 @@ export default function SetupPage() {
           ))}
         </div>
 
-        {/* Content area */}
+        {/* Content */}
         <div className="flex-1 flex items-center justify-center px-8 overflow-hidden">
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div
@@ -146,38 +126,89 @@ export default function SetupPage() {
                     Hi, I'm Bob
                   </motion.div>
                   <p className="text-foreground/80 text-base font-medium">
-                    Your voice-powered answer engine.
+                    Your voice-powered AI assistant.
                   </p>
                   <p className="text-muted-foreground text-sm">
-                    Ask me anything — I'll search the web and give you the best
-                    answer.
+                    Bob connects to AI CLI tools like Claude and OpenAI.
+                    Let's find what you have installed.
                   </p>
                 </div>
               )}
 
-              {step === 'downloading' && (
-                <div className="text-center space-y-6">
-                  <Loader2 className="w-10 h-10 mx-auto animate-spin text-primary" />
-                  <div className="space-y-2">
-                    <h2 className="text-lg font-semibold">Setting up Bob...</h2>
-                    {modelName && (
-                      <p className="text-xs text-muted-foreground">
-                        Downloading {modelName}
-                      </p>
-                    )}
-                  </div>
-                  <div className="w-full max-w-xs mx-auto space-y-1.5">
-                    <div className="w-full h-2 rounded-full bg-secondary overflow-hidden">
-                      <motion.div
-                        className="h-full rounded-full bg-primary"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${downloadPercent}%` }}
-                        transition={{ duration: 0.3, ease: 'easeOut' }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground text-right">
-                      {downloadPercent}%
+              {step === 'detect' && (
+                <div className="space-y-5">
+                  <div className="text-center space-y-2">
+                    <Search className="w-8 h-8 mx-auto text-primary" />
+                    <h2 className="text-lg font-semibold">
+                      {hasInstalledProvider
+                        ? 'Found your tools'
+                        : 'No CLI tools found'}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      {hasInstalledProvider
+                        ? 'Select which one Bob should use.'
+                        : 'Install one of these to get started.'}
                     </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {providers.filter((p) => p.primary).map((p) => (
+                      <div
+                        key={p.id}
+                        className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
+                          selectedProvider === p.id
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-foreground">
+                            {p.name}
+                          </span>
+                          {p.installed ? (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 font-medium">
+                              Installed
+                            </span>
+                          ) : (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
+                              Not found
+                            </span>
+                          )}
+                        </div>
+                        {p.installed ? (
+                          <button
+                            onClick={() => selectProvider(p.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              selectedProvider === p.id
+                                ? 'bg-primary text-white'
+                                : 'bg-secondary text-foreground hover:bg-secondary/80 border border-border'
+                            }`}
+                          >
+                            {selectedProvider === p.id ? (
+                              <span className="flex items-center gap-1">
+                                <Check className="w-3 h-3" /> Selected
+                              </span>
+                            ) : (
+                              'Select'
+                            )}
+                          </button>
+                        ) : (
+                          <a
+                            href={
+                              p.id === 'claude'
+                                ? 'https://docs.anthropic.com/en/docs/claude-code/overview'
+                                : 'https://platform.openai.com/docs/guides/cli'
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs font-medium hover:bg-secondary/80 border border-border transition-colors"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            Install
+                          </a>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -199,7 +230,7 @@ export default function SetupPage() {
                     <kbd className="px-1.5 py-0.5 rounded bg-muted border border-border text-xs font-mono">
                       {shortcutLabel}
                     </kbd>{' '}
-                    to ask me anything.
+                    to speak and get answers.
                   </p>
                 </div>
               )}
@@ -213,11 +244,24 @@ export default function SetupPage() {
             <button
               onClick={() => {
                 setDirection(1)
-                setStep('downloading')
+                setStep('detect')
               }}
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
             >
               Get Started
+            </button>
+          )}
+
+          {step === 'detect' && (
+            <button
+              onClick={() => {
+                setDirection(1)
+                setStep('done')
+              }}
+              disabled={!hasInstalledProvider}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Continue
             </button>
           )}
 
