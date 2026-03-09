@@ -420,8 +420,8 @@ ipcMain.handle('models:select', async (_event, modelId: string) => {
 // LLM query handler — streams tokens back to renderer
 // NOTE: This system prompt is used by cloud providers only.
 // Local models use SEARCH_SYSTEM_PROMPT from search-pipeline.ts for agentic search.
-const SYSTEM_PROMPT =
-  'You are Bob, a helpful voice-activated desktop assistant. The user spoke their query aloud and it was transcribed. Respond concisely and directly. Use markdown formatting when helpful.'
+const CLOUD_SYSTEM_PROMPT =
+  'You are Bob, a search-powered answer engine. The user spoke their question aloud and it was transcribed. You will receive web search results as context. Answer based on the search results provided. Be concise and direct. Use markdown formatting when helpful. Include source URLs at the end of your answer.'
 
 // Conversation history for cloud providers (local model tracks its own via LlamaChatSession)
 let cloudMessages: { role: 'user' | 'assistant'; content: string }[] = []
@@ -499,6 +499,10 @@ ipcMain.handle('llm:query', async (event, text: string) => {
     } else {
       // Cloud providers via Vercel AI SDK
       const { streamText } = await import('ai')
+      const { searchWeb } = await import('./lib/search/web-search')
+      const { extractPage } = await import('./lib/search/page-extractor')
+      const { emitStatus } = await import('./lib/status')
+
       let aiModel: any
 
       if (provider === 'openai') {
@@ -517,15 +521,61 @@ ipcMain.handle('llm:query', async (event, text: string) => {
         throw new Error(`Unknown provider: ${provider}`)
       }
 
+      // Run web search pipeline
+      emitStatus(sender, 'searching')
+      const searchResults = await searchWeb(text, 8)
+
+      emitStatus(sender, 'reading-page')
+      const pages = await Promise.all(
+        searchResults.slice(0, 5).map((r) => extractPage(r.url))
+      )
+      const validPages = pages.filter(
+        (p): p is NonNullable<typeof p> => p !== null
+      )
+
+      const searchContext =
+        validPages.length > 0
+          ? validPages
+              .map(
+                (p) => `## ${p.title}\nSource: ${p.url}\n\n${p.content}`
+              )
+              .join('\n\n---\n\n')
+          : ''
+
+      // Send sources to renderer
+      const sources = validPages.map((p) => ({ title: p.title, url: p.url }))
+      if (sources.length > 0) {
+        sender.send('bob:sources', sources)
+      }
+
       // Add user message to history
       cloudMessages.push({ role: 'user', content: text })
 
+      // Build messages with search context
+      const enrichedMessages = [
+        ...(searchContext
+          ? [
+              {
+                role: 'user' as const,
+                content: `Web search results for context:\n\n${searchContext}`,
+              },
+              {
+                role: 'assistant' as const,
+                content:
+                  "I'll use these search results to answer your question.",
+              },
+            ]
+          : []),
+        ...cloudMessages,
+      ]
+
+      emitStatus(sender, 'answering')
       sender.send('bob:state', 'streaming')
 
       const result = streamText({
         model: aiModel,
-        system: SYSTEM_PROMPT,
-        messages: cloudMessages,
+        system: CLOUD_SYSTEM_PROMPT,
+        messages: enrichedMessages,
       })
 
       let assistantResponse = ''
