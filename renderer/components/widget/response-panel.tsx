@@ -11,6 +11,7 @@ interface ResponsePanelProps {
   streamingResponse: string
   shortcutLabel: string
   currentStatus: { step: string; message: string; icon: string } | null
+  sources: { title: string; url: string }[]
   onDismiss: () => void
   onClear: () => void
   onCopy: () => void
@@ -22,6 +23,7 @@ export default function ResponsePanel({
   streamingResponse,
   shortcutLabel,
   currentStatus,
+  sources,
   onDismiss,
   onClear,
   onCopy,
@@ -211,6 +213,31 @@ export default function ResponsePanel({
             </div>
           )}
         </div>
+
+        {/* Sources */}
+        {sources.length > 0 && state === 'complete' && (
+          <div className="border-t border-border/30 px-3.5 py-2">
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/60">
+              Sources
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {sources.map((source, i) => (
+                <a
+                  key={i}
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-lg border border-border/40 bg-background/50 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+                  title={source.url}
+                >
+                  <span className="max-w-[180px] truncate">
+                    {source.title || (() => { try { return new URL(source.url).hostname } catch { return source.url } })()}
+                  </span>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Action bar */}
         {state === 'complete' && messages.length > 0 && (

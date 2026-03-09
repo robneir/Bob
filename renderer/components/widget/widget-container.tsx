@@ -65,6 +65,7 @@ export default function WidgetContainer() {
     icon: string
   } | null>(null)
   const [shortcutLabel, setShortcutLabel] = useState(DEFAULT_SHORTCUT_LABEL)
+  const [sources, setSources] = useState<{ title: string; url: string }[]>([])
   const { startRecording, stopRecording, audioLevel } = useAudioRecorder()
   const stateRef = useRef<WidgetState>('idle')
   const contentRef = useRef<HTMLDivElement>(null)
@@ -173,6 +174,10 @@ export default function WidgetContainer() {
       setCurrentStatus(status)
     })
 
+    const unsubSources = window.bob.onSources?.((newSources) => {
+      setSources((prev) => [...prev, ...newSources])
+    })
+
     const unsubRecordStart = window.bob.onRecordingStart(async () => {
       try {
         setError('')
@@ -236,6 +241,7 @@ export default function WidgetContainer() {
     return () => {
       unsubState()
       unsubStatus?.()
+      unsubSources?.()
       unsubRecordStart()
       unsubRecordStop()
     }
@@ -282,6 +288,7 @@ export default function WidgetContainer() {
 
   const handleDismiss = useCallback(() => {
     setMessages([])
+    setSources([])
     resetStreamingState()
     setError('')
     if (window.bob) {
@@ -291,6 +298,7 @@ export default function WidgetContainer() {
 
   const handleClear = useCallback(() => {
     setMessages([])
+    setSources([])
     resetStreamingState()
     setError('')
     if (window.bob?.clearConversation) {
@@ -370,6 +378,7 @@ export default function WidgetContainer() {
                 streamingResponse={streamingResponse}
                 shortcutLabel={shortcutLabel}
                 currentStatus={currentStatus}
+                sources={sources}
                 onDismiss={handleDismiss}
                 onClear={handleClear}
                 onCopy={handleCopy}
