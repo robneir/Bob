@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
-import { X, Trash2, Settings } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { X, Trash2, Settings, Send } from 'lucide-react'
 
 type TerminalStatus = 'terminal' | 'listening' | 'transcribing'
 
@@ -10,6 +10,8 @@ interface TerminalPanelProps {
   onClear: () => void
   visible?: boolean
   status?: TerminalStatus
+  pendingText?: string
+  onSendPending?: () => void
 }
 
 export default function TerminalPanel({
@@ -18,6 +20,8 @@ export default function TerminalPanel({
   onClear,
   visible = true,
   status = 'terminal',
+  pendingText = '',
+  onSendPending,
 }: TerminalPanelProps) {
   const termRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<any>(null)
@@ -138,15 +142,22 @@ export default function TerminalPanel({
 
   // Listen for voice transcription paste events
   useEffect(() => {
-    const handler = (_e: Event) => {
+    const pasteHandler = (_e: Event) => {
       const detail = (_e as CustomEvent<string>).detail
       if (detail && xtermRef.current) {
         window.bob?.writePty(detail)
         xtermRef.current.focus()
       }
     }
-    window.addEventListener('bob:paste-to-terminal', handler)
-    return () => window.removeEventListener('bob:paste-to-terminal', handler)
+    const focusHandler = () => {
+      xtermRef.current?.focus()
+    }
+    window.addEventListener('bob:paste-to-terminal', pasteHandler)
+    window.addEventListener('bob:focus-terminal', focusHandler)
+    return () => {
+      window.removeEventListener('bob:paste-to-terminal', pasteHandler)
+      window.removeEventListener('bob:focus-terminal', focusHandler)
+    }
   }, [])
 
   return (
@@ -219,6 +230,32 @@ export default function TerminalPanel({
           </button>
         </div>
       </div>
+
+      {/* Pending text banner */}
+      <AnimatePresence>
+        {pendingText && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="overflow-hidden border-b border-border/30"
+          >
+            <div className="flex items-center gap-2 px-3 py-2 bg-primary/5">
+              <p className="flex-1 min-w-0 text-xs text-foreground truncate">
+                {pendingText}
+              </p>
+              <button
+                onClick={onSendPending}
+                className="flex items-center gap-1 shrink-0 rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-primary/90"
+              >
+                <Send className="h-3 w-3" />
+                Send
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Terminal */}
       <div

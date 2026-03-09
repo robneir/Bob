@@ -51,6 +51,7 @@ export default function WidgetContainer() {
   const [error, setError] = useState('')
   const [shortcutLabel, setShortcutLabel] = useState(DEFAULT_SHORTCUT_LABEL)
   const [ptyAlive, setPtyAlive] = useState(false)
+  const [pendingText, setPendingText] = useState('')
   const { startRecording, stopRecording, audioLevel } = useAudioRecorder()
   const stateRef = useRef<WidgetState>('idle')
   const contentRef = useRef<HTMLDivElement>(null)
@@ -168,17 +169,21 @@ export default function WidgetContainer() {
         if (!alive) {
           await window.bob.spawnCli()
           setPtyAlive(true)
+          setState('terminal')
+
+          // Fresh spawn — CLI may have startup prompts (e.g. trust folder).
+          // Buffer the text and show a pending banner instead of auto-pasting.
+          setPendingText(text)
+        } else {
+          setState('terminal')
+
+          // Existing session — CLI is ready, paste immediately
+          setTimeout(() => {
+            window.dispatchEvent(
+              new CustomEvent('bob:paste-to-terminal', { detail: text })
+            )
+          }, 100)
         }
-
-        setState('terminal')
-
-        // Small delay to let terminal mount, then paste
-        // Longer delay for fresh spawn (xterm needs to load), short for existing session
-        setTimeout(() => {
-          window.dispatchEvent(
-            new CustomEvent('bob:paste-to-terminal', { detail: text })
-          )
-        }, alive ? 100 : 600)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Recording failed')
         setState('error')
@@ -200,12 +205,23 @@ export default function WidgetContainer() {
   const handleClear = useCallback(() => {
     setError('')
     setPtyAlive(false)
+    setPendingText('')
     if (window.bob) {
       window.bob.killPty()
       window.bob.hideWidget()
     }
     setState('idle')
   }, [])
+
+  const handleSendPending = useCallback(() => {
+    if (!pendingText) return
+    window.bob?.writePty(pendingText)
+    setPendingText('')
+    // Focus terminal after sending
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('bob:focus-terminal'))
+    }, 50)
+  }, [pendingText])
 
   // Escape key dismisses
   useEffect(() => {
@@ -233,6 +249,8 @@ export default function WidgetContainer() {
               onClear={handleClear}
               visible={terminalActive}
               status={state === 'listening' ? 'listening' : state === 'transcribing' ? 'transcribing' : 'terminal'}
+              pendingText={pendingText}
+              onSendPending={handleSendPending}
             />
           </div>
         )}
