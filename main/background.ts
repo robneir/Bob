@@ -38,6 +38,19 @@ const settingsStore = new Store({
   },
 })
 
+function enforceExternalLinks(win: BrowserWindow) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (event, url) => {
+    // Allow internal navigation (same-origin dev server or app:// protocol)
+    if (url.startsWith('app://') || url.startsWith('http://localhost')) return
+    event.preventDefault()
+    shell.openExternal(url)
+  })
+}
+
 let widgetWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -83,6 +96,8 @@ function createWidgetWindow() {
     },
   })
 
+  enforceExternalLinks(widgetWindow)
+
   widgetWindow.setVisibleOnAllWorkspaces(true, {
     visibleOnFullScreen: true,
   })
@@ -113,6 +128,8 @@ function createSettingsWindow() {
       contextIsolation: true,
     },
   })
+
+  enforceExternalLinks(settingsWindow)
 
   settingsWindow.on('closed', () => {
     settingsWindow = null

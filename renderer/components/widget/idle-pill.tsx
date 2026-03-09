@@ -124,7 +124,7 @@ export default function IdlePill({
       {/* Unified pill */}
       <div className="flex flex-col items-end">
         <motion.div
-          className={`flex items-center rounded-full border ${sz.pill} shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-colors cursor-grab active:cursor-grabbing overflow-hidden ${
+          className={`flex items-center rounded-full border ${sz.pill} shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-all duration-200 cursor-grab active:cursor-grabbing overflow-hidden ${
             status === 'listening'
               ? 'bg-card/60'
               : status === 'transcribing'
@@ -152,15 +152,15 @@ export default function IdlePill({
           </AnimatePresence>
 
           {/* Right side — animates between states */}
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="popLayout">
             {status === 'listening' ? (
               <motion.div
                 key="listening"
                 className="flex items-center gap-2"
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
               >
                 <div className={`flex items-center gap-[3px] ${sz.wave}`}>
                   {[0, 1, 2, 3, 4, 5, 6].map((i) => {
@@ -172,7 +172,7 @@ export default function IdlePill({
                         key={i}
                         className={`${sz.bar} rounded-full`}
                         animate={{ scaleY: scale }}
-                        transition={{ duration: 0.1, ease: 'easeOut' }}
+                        transition={{ duration: 0.08, ease: 'linear' }}
                         style={{ height: '100%', backgroundColor: brandColor }}
                       />
                     )
@@ -183,17 +183,18 @@ export default function IdlePill({
               <motion.div
                 key="transcribing"
                 className="flex items-center gap-1"
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
               >
                 {[0, 1, 2].map((i) => (
                   <motion.div
                     key={i}
-                    className={`${sz.dot} rounded-full bg-primary`}
-                    animate={{ y: [0, -4, 0] }}
-                    transition={{ duration: 0.6, repeat: Infinity, ease: 'easeInOut', delay: i * 0.1 }}
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: brandColor }}
+                    animate={{ opacity: [0.3, 1, 0.3] }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut', delay: i * 0.2 }}
                   />
                 ))}
               </motion.div>
@@ -201,10 +202,10 @@ export default function IdlePill({
               <motion.div
                 key="idle"
                 className="flex items-center gap-2"
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
               >
                 {/* Alternative LLM icons inside the pill */}
                 {others.map((p) => (
