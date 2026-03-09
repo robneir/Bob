@@ -418,6 +418,8 @@ ipcMain.handle('models:select', async (_event, modelId: string) => {
 })
 
 // LLM query handler — streams tokens back to renderer
+// NOTE: This system prompt is used by cloud providers only.
+// Local models use SEARCH_SYSTEM_PROMPT from search-pipeline.ts for agentic search.
 const SYSTEM_PROMPT =
   'You are Bob, a helpful voice-activated desktop assistant. The user spoke their query aloud and it was transcribed. Respond concisely and directly. Use markdown formatting when helpful.'
 
@@ -432,9 +434,10 @@ ipcMain.handle('llm:query', async (event, text: string) => {
     sender.send('bob:state', 'thinking')
 
     if (provider === 'local') {
-      // Use bundled local model via node-llama-cpp
-      const { loadModel, streamChat } = await import(
-        './lib/llm/local-engine'
+      // Use bundled local model via node-llama-cpp with agentic search tools
+      const { loadModel, getContext } = await import('./lib/llm/local-engine')
+      const { createSearchTools, SEARCH_SYSTEM_PROMPT } = await import(
+        './lib/search/search-pipeline'
       )
 
       const modelId = settingsStore.get('localModel') as string
@@ -450,12 +453,46 @@ ipcMain.handle('llm:query', async (event, text: string) => {
 
       await loadModel(modelPath)
 
-      sender.send('bob:state', 'streaming')
-      const response = await streamChat(text, SYSTEM_PROMPT, (chunk) => {
-        if (!sender.isDestroyed()) {
-          sender.send('llm:token', chunk)
-        }
+      // Dynamic import that bypasses webpack bundling (ESM-only module)
+      const importNodeLlama = () =>
+        Function('return import("node-llama-cpp")')() as Promise<
+          typeof import('node-llama-cpp')
+        >
+
+      // Set up search tools for the agentic loop
+      const { sources, getTools } = createSearchTools(sender, importNodeLlama)
+      const functions = await getTools()
+
+      // Create a fresh chat session with the search system prompt
+      const { LlamaChatSession } = await importNodeLlama()
+      const ctx = getContext()
+      const agentSession = new LlamaChatSession({
+        contextSequence: ctx.getSequence(),
+        systemPrompt: SEARCH_SYSTEM_PROMPT,
       })
+
+      const { emitStatus } = await import('./lib/status')
+      emitStatus(sender, 'thinking')
+
+      let hasStartedStreaming = false
+      await agentSession.prompt(text, {
+        functions,
+        onTextChunk(chunk: string) {
+          if (!hasStartedStreaming) {
+            hasStartedStreaming = true
+            emitStatus(sender, 'answering')
+            sender.send('bob:state', 'streaming')
+          }
+          if (!sender.isDestroyed()) {
+            sender.send('llm:token', chunk)
+          }
+        },
+      })
+
+      // Send collected sources to the renderer
+      if (sources.length > 0) {
+        sender.send('bob:sources', sources)
+      }
 
       sender.send('llm:done')
       sender.send('bob:state', 'complete')

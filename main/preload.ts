@@ -70,6 +70,11 @@ const bob = {
     ipcRenderer.on('bob:status', handler)
     return () => ipcRenderer.removeListener('bob:status', handler)
   },
+  onSources: (cb: (sources: { title: string; url: string }[]) => void) => {
+    const handler = (_event: IpcRendererEvent, sources: { title: string; url: string }[]) => cb(sources)
+    ipcRenderer.on('bob:sources', handler)
+    return () => ipcRenderer.removeListener('bob:sources', handler)
+  },
 
   // Recording state events from main process
   onStateChange: (
