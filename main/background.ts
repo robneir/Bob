@@ -24,13 +24,7 @@ if (isProd) {
 const settingsStore = new Store({
   name: 'bob-settings',
   defaults: {
-    provider: 'local' as string,
-    localModel: '' as string, // ID of selected local model
-    downloadedModels: {} as Record<string, string>, // { modelId: localPath }
-    openaiApiKey: '',
-    openaiModel: 'gpt-4o',
-    anthropicApiKey: '',
-    anthropicModel: 'claude-sonnet-4-20250514',
+    cliProvider: '' as string,
     shortcut: 'CommandOrControl+Shift+Space',
     interactionMode: 'toggle' as string,
     whisperModel: 'base',
@@ -44,7 +38,7 @@ let settingsWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isRecording = false
 
-const WIDGET_WIDTH = 420
+const WIDGET_WIDTH = 640
 const WIDGET_HEIGHT_COLLAPSED = 64
 const WIDGET_MARGIN = 16
 
@@ -135,12 +129,9 @@ function resizeWidget(height: number) {
 }
 
 function createFallbackTrayIcon(): Electron.NativeImage {
-  // Create a simple 16x16 tray icon with a "W" shape as a data URL
-  // This is a 16x16 PNG with a simple waveform pattern
   const size = 16
-  const canvas = Buffer.alloc(size * size * 4, 0) // RGBA
+  const canvas = Buffer.alloc(size * size * 4, 0)
 
-  // Draw a simple waveform pattern (3 bars)
   const barPositions = [4, 7, 10]
   const barHeights = [6, 10, 6]
   for (let b = 0; b < barPositions.length; b++) {
@@ -150,10 +141,10 @@ function createFallbackTrayIcon(): Electron.NativeImage {
     for (let y = startY; y < startY + h; y++) {
       for (let dx = 0; dx < 2; dx++) {
         const idx = (y * size + x + dx) * 4
-        canvas[idx] = 255 // R
-        canvas[idx + 1] = 255 // G
-        canvas[idx + 2] = 255 // B
-        canvas[idx + 3] = 200 // A
+        canvas[idx] = 255
+        canvas[idx + 1] = 255
+        canvas[idx + 2] = 255
+        canvas[idx + 3] = 200
       }
     }
   }
@@ -165,7 +156,6 @@ function createFallbackTrayIcon(): Electron.NativeImage {
 }
 
 function createTray() {
-  // Try to load template image, fallback to a programmatic icon
   const iconPath = path.join(
     __dirname,
     isProd ? '../resources' : '../../resources',
@@ -240,8 +230,6 @@ function registerShortcuts() {
         widgetWindow.webContents.send('bob:recording-stop')
       }
     } else {
-      // Push-to-talk: toggle uses same logic for now
-      // Full push-to-talk with keyup requires uiohook-napi (Phase 6)
       isRecording = !isRecording
       if (isRecording) {
         widgetWindow.show()
@@ -266,7 +254,6 @@ ipcMain.handle('settings:update', (_event, updates: Record<string, unknown>) => 
   for (const [key, value] of Object.entries(updates)) {
     settingsStore.set(key, value)
   }
-  // Re-register shortcuts if shortcut or mode changed
   if ('shortcut' in updates || 'interactionMode' in updates) {
     registerShortcuts()
   }
@@ -297,7 +284,8 @@ ipcMain.handle('settings:open', () => {
   openSettings()
 })
 
-// Transcription handler — receives Float32 PCM audio from renderer
+// --- Audio / Whisper ---
+
 ipcMain.handle(
   'audio:transcribe',
   async (_event, audioData: ArrayBuffer, sampleRate: number) => {
@@ -317,7 +305,6 @@ ipcMain.handle(
   }
 )
 
-// Pre-load Whisper model in background
 ipcMain.handle('whisper:load', async () => {
   try {
     const { loadWhisperModel, isModelLoaded } = await import(
@@ -325,7 +312,6 @@ ipcMain.handle('whisper:load', async () => {
     )
     if (!isModelLoaded()) {
       const modelName = settingsStore.get('whisperModel') as string
-      // Store globally so transcriber can access it on first-use load
       ;(global as any).__wavyWhisperModel = modelName
       await loadWhisperModel(modelName)
     }
@@ -337,298 +323,60 @@ ipcMain.handle('whisper:load', async () => {
   }
 })
 
-// --- Local Model Management ---
+// --- CLI / PTY ---
 
-ipcMain.handle('models:list', async () => {
-  try {
-    const { getModelsWithStatus, CURATED_MODELS } = await import(
-      './lib/llm/local-engine'
-    )
-    const downloaded = settingsStore.get('downloadedModels') as Record<
-      string,
-      string
-    >
-    return {
-      success: true,
-      models: getModelsWithStatus(downloaded || {}),
-      selectedModel: settingsStore.get('localModel'),
-    }
-  } catch (error) {
-    const { CURATED_MODELS } = await import('./lib/llm/local-engine')
-    return {
-      success: true,
-      models: CURATED_MODELS.map((m) => ({ ...m, downloaded: false })),
-      selectedModel: settingsStore.get('localModel'),
-    }
+ipcMain.handle('pty:spawn', async (event) => {
+  const { spawnCli } = await import('./lib/cli/pty-manager')
+  const { CLI_PROVIDERS } = await import('./lib/cli/providers')
+  const sender = event.sender
+
+  const providerId = settingsStore.get('cliProvider') as string
+  const provider = CLI_PROVIDERS.find((p) => p.id === providerId)
+  if (!provider) {
+    return { success: false, error: 'No CLI provider selected. Please select one in Settings.' }
   }
-})
 
-ipcMain.handle('models:download', async (event, modelId: string) => {
-  try {
-    const { CURATED_MODELS, downloadModel } = await import(
-      './lib/llm/local-engine'
-    )
-    const model = CURATED_MODELS.find((m) => m.id === modelId)
-    if (!model) return { success: false, error: 'Unknown model' }
+  const pty = spawnCli(provider.command)
 
-    const localPath = await downloadModel(model.uri, model.sizeBytes, (progress) => {
-      if (!event.sender.isDestroyed()) {
-        event.sender.send('models:download-progress', {
-          modelId,
-          ...progress,
-        })
-      }
-    })
+  pty.onData((data) => {
+    if (!sender.isDestroyed()) sender.send('pty:data', data)
+  })
 
-    // Store the downloaded path
-    const downloaded =
-      (settingsStore.get('downloadedModels') as Record<string, string>) || {}
-    downloaded[modelId] = localPath
-    settingsStore.set('downloadedModels', downloaded)
+  pty.onExit(({ exitCode }) => {
+    if (!sender.isDestroyed()) sender.send('pty:exit', exitCode)
+  })
 
-    // Auto-select if no model selected yet
-    if (!settingsStore.get('localModel')) {
-      settingsStore.set('localModel', modelId)
-    }
-
-    if (!event.sender.isDestroyed()) {
-      event.sender.send('models:download-progress', {
-        modelId,
-        status: 'complete',
-      })
-    }
-
-    return { success: true, localPath }
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Download failed'
-    if (!event.sender.isDestroyed()) {
-      event.sender.send('models:download-progress', {
-        modelId,
-        status: 'error',
-        error: message,
-      })
-    }
-    return { success: false, error: message }
-  }
-})
-
-ipcMain.handle('models:select', async (_event, modelId: string) => {
-  settingsStore.set('localModel', modelId)
-  // Unload current model so it reloads with the new one on next query
-  try {
-    const { unloadModel } = await import('./lib/llm/local-engine')
-    await unloadModel()
-  } catch {}
   return { success: true }
 })
 
-// LLM query handler — streams tokens back to renderer
-// NOTE: This system prompt is used by cloud providers only.
-// Local models use SEARCH_SYSTEM_PROMPT from search-pipeline.ts for agentic search.
-const CLOUD_SYSTEM_PROMPT =
-  'You are Bob, a search-powered answer engine. The user spoke their question aloud and it was transcribed. You will receive web search results as context. Answer based on the search results provided. Be concise and direct. Use markdown formatting when helpful. Include source URLs at the end of your answer.'
-
-// Conversation history for cloud providers (local model tracks its own via LlamaChatSession)
-let cloudMessages: { role: 'user' | 'assistant'; content: string }[] = []
-
-ipcMain.handle('llm:query', async (event, text: string) => {
-  const provider = settingsStore.get('provider') as string
-  const sender = event.sender
-
-  const safeSend = (channel: string, ...args: unknown[]) => {
-    if (!sender.isDestroyed()) sender.send(channel, ...args)
-  }
-
-  try {
-    safeSend('bob:state', 'thinking')
-
-    if (provider === 'local') {
-      // Use bundled local model via node-llama-cpp with agentic search tools
-      const { loadModel, getContext, clearChat } = await import('./lib/llm/local-engine')
-      const { createSearchTools, SEARCH_SYSTEM_PROMPT } = await import(
-        './lib/search/search-pipeline'
-      )
-
-      const modelId = settingsStore.get('localModel') as string
-      const downloaded =
-        (settingsStore.get('downloadedModels') as Record<string, string>) || {}
-      const modelPath = downloaded[modelId]
-
-      if (!modelPath) {
-        throw new Error(
-          'No local model downloaded. Please download a model in Settings.'
-        )
-      }
-
-      await loadModel(modelPath)
-
-      // Free any existing session's sequence before creating a new one
-      clearChat()
-
-      // Dynamic import that bypasses webpack bundling (ESM-only module)
-      const importNodeLlama = () =>
-        Function('return import("node-llama-cpp")')() as Promise<
-          typeof import('node-llama-cpp')
-        >
-
-      // Set up search tools for the agentic loop
-      const { sources, getTools } = createSearchTools(sender, importNodeLlama)
-      const functions = await getTools()
-
-      // Create a fresh chat session with the search system prompt
-      const { LlamaChatSession } = await importNodeLlama()
-      const ctx = getContext()
-      const agentSession = new LlamaChatSession({
-        contextSequence: ctx.getSequence(),
-        systemPrompt: SEARCH_SYSTEM_PROMPT,
-      })
-
-      const { emitStatus } = await import('./lib/status')
-      emitStatus(sender, 'thinking')
-
-      let hasStartedStreaming = false
-      try {
-        await agentSession.prompt(text, {
-          functions,
-          onTextChunk(chunk: string) {
-            if (!hasStartedStreaming) {
-              hasStartedStreaming = true
-              emitStatus(sender, 'answering')
-              safeSend('bob:state', 'streaming')
-            }
-            safeSend('llm:token', chunk)
-          },
-        })
-      } finally {
-        // Dispose the agent session's sequence so it's available for the next query
-        try { agentSession.contextSequence?.dispose() } catch {}
-      }
-
-      // Send collected sources to the renderer
-      if (sources.length > 0) {
-        safeSend('bob:sources', sources)
-      }
-
-      safeSend('llm:done')
-      safeSend('bob:state', 'complete')
-    } else {
-      // Cloud providers via Vercel AI SDK
-      const { streamText } = await import('ai')
-      const { searchWeb } = await import('./lib/search/web-search')
-      const { extractPage } = await import('./lib/search/page-extractor')
-      const { emitStatus } = await import('./lib/status')
-
-      let aiModel: any
-
-      if (provider === 'openai') {
-        const { createOpenAI } = await import('@ai-sdk/openai')
-        const openai = createOpenAI({
-          apiKey: settingsStore.get('openaiApiKey') as string,
-        })
-        aiModel = openai(settingsStore.get('openaiModel') as string)
-      } else if (provider === 'anthropic') {
-        const { createAnthropic } = await import('@ai-sdk/anthropic')
-        const anthropic = createAnthropic({
-          apiKey: settingsStore.get('anthropicApiKey') as string,
-        })
-        aiModel = anthropic(settingsStore.get('anthropicModel') as string)
-      } else {
-        throw new Error(`Unknown provider: ${provider}`)
-      }
-
-      // Run web search pipeline
-      emitStatus(sender, 'searching')
-      const searchResults = await searchWeb(text, 8)
-
-      emitStatus(sender, 'reading-page')
-      const pages = await Promise.all(
-        searchResults.slice(0, 5).map((r) => extractPage(r.url))
-      )
-      const validPages = pages.filter(
-        (p): p is NonNullable<typeof p> => p !== null
-      )
-
-      const searchContext =
-        validPages.length > 0
-          ? validPages
-              .map(
-                (p) => `## ${p.title}\nSource: ${p.url}\n\n${p.content}`
-              )
-              .join('\n\n---\n\n')
-          : ''
-
-      // Send sources to renderer
-      const sources = validPages.map((p) => ({ title: p.title, url: p.url }))
-      if (sources.length > 0) {
-        safeSend('bob:sources', sources)
-      }
-
-      // Add user message to history
-      cloudMessages.push({ role: 'user', content: text })
-
-      // Build messages with search context
-      const enrichedMessages = [
-        ...(searchContext
-          ? [
-              {
-                role: 'user' as const,
-                content: `Web search results for context:\n\n${searchContext}`,
-              },
-              {
-                role: 'assistant' as const,
-                content:
-                  "I'll use these search results to answer your question.",
-              },
-            ]
-          : []),
-        ...cloudMessages,
-      ]
-
-      emitStatus(sender, 'answering')
-      safeSend('bob:state', 'streaming')
-
-      const result = streamText({
-        model: aiModel,
-        system: CLOUD_SYSTEM_PROMPT,
-        messages: enrichedMessages,
-      })
-
-      let assistantResponse = ''
-      for await (const chunk of result.textStream) {
-        if (sender.isDestroyed()) break
-        assistantResponse += chunk
-        safeSend('llm:token', chunk)
-      }
-
-      // Add assistant response to history
-      cloudMessages.push({ role: 'assistant', content: assistantResponse })
-
-      safeSend('llm:done')
-      safeSend('bob:state', 'complete')
-    }
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Unknown error occurred'
-    safeSend('llm:error', message)
-    safeSend('bob:state', 'error')
-  }
+ipcMain.handle('pty:write', async (_event, data: string) => {
+  const { writeToPty } = await import('./lib/cli/pty-manager')
+  writeToPty(data)
 })
 
-ipcMain.handle('llm:clear', async () => {
-  // Clear cloud conversation history
-  cloudMessages = []
-  // Clear local model session
-  try {
-    const { clearChat } = await import('./lib/llm/local-engine')
-    clearChat()
-  } catch {}
+ipcMain.handle('pty:resize', async (_event, cols: number, rows: number) => {
+  const { resizePty } = await import('./lib/cli/pty-manager')
+  resizePty(cols, rows)
+})
+
+ipcMain.handle('pty:kill', async () => {
+  const { killPty } = await import('./lib/cli/pty-manager')
+  killPty()
+})
+
+ipcMain.handle('pty:alive', async () => {
+  const { isPtyAlive } = await import('./lib/cli/pty-manager')
+  return isPtyAlive()
+})
+
+ipcMain.handle('cli:detect', async () => {
+  const { detectInstalledProviders } = await import('./lib/cli/providers')
+  return detectInstalledProviders()
 })
 
 // --- App Lifecycle ---
 
 ;(async () => {
-  // Single instance lock
   const gotLock = app.requestSingleInstanceLock()
   if (!gotLock) {
     app.quit()
@@ -637,10 +385,11 @@ ipcMain.handle('llm:clear', async () => {
 
   await app.whenReady()
 
-  // Auto-select model based on RAM if no model selected
-  if (!settingsStore.get('localModel')) {
-    const { getDefaultModelId } = await import('./lib/llm/local-engine')
-    settingsStore.set('localModel', getDefaultModelId())
+  // Auto-detect CLI provider if none selected
+  if (!settingsStore.get('cliProvider')) {
+    const { getDefaultProvider } = await import('./lib/cli/providers')
+    const defaultId = getDefaultProvider()
+    if (defaultId) settingsStore.set('cliProvider', defaultId)
   }
 
   // Create widget window
@@ -652,23 +401,19 @@ ipcMain.handle('llm:clear', async () => {
     await widget.loadURL(`http://localhost:${port}/home`)
   }
 
-  // Show widget
   widget.show()
 
-  // Create system tray
   createTray()
-
-  // Register global shortcuts
   registerShortcuts()
 
-  // Pre-load Whisper model in background (non-blocking)
+  // Pre-load Whisper model in background
   const whisperModel = settingsStore.get('whisperModel') as string
   ;(global as any).__wavyWhisperModel = whisperModel
   import('./lib/whisper/transcriber')
     .then(({ loadWhisperModel }) => loadWhisperModel(whisperModel))
     .catch((err) => console.warn('[Bob] Whisper pre-load failed (will retry on first use):', err.message))
 
-  // If setup not complete, open settings/wizard
+  // If setup not complete, open wizard
   if (!settingsStore.get('setupComplete')) {
     if (isProd) {
       const win = createSettingsWindow()
@@ -684,7 +429,6 @@ ipcMain.handle('llm:clear', async () => {
 })()
 
 app.on('window-all-closed', () => {
-  // On macOS, keep app running in tray
   if (process.platform !== 'darwin') {
     app.quit()
   }
@@ -692,6 +436,10 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  // Clean up PTY on quit
+  import('./lib/cli/pty-manager')
+    .then(({ killPty }) => killPty())
+    .catch(() => {})
 })
 
 app.on('second-instance', () => {
