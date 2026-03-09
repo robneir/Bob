@@ -51,15 +51,20 @@ export function createSearchTools(
             searchCount++
             status(searchCount === 1 ? 'searching' : 'searching-again')
 
-            const results = await searchWeb(query)
-            if (results.length === 0) {
-              return 'No results found. Try a different search query.'
-            }
+            try {
+              const results = await searchWeb(query)
+              if (results.length === 0) {
+                return 'No results found. Try a different search query.'
+              }
 
-            status('scanning-results')
-            return results
-              .map((r, i) => `[${i + 1}] ${r.title}\n    ${r.url}\n    ${r.snippet}`)
-              .join('\n\n')
+              status('scanning-results')
+              return results
+                .map((r, i) => `[${i + 1}] ${r.title}\n    ${r.url}\n    ${r.snippet}`)
+                .join('\n\n')
+            } catch (err) {
+              console.error('[Bob] Search tool error:', err)
+              return 'Web search is temporarily unavailable. Answer the question using your existing knowledge and let the user know the answer may not reflect the latest information.'
+            }
           },
         }),
 
@@ -81,13 +86,18 @@ export function createSearchTools(
               pageCount > 2 ? `Reading source ${pageCount}...` : undefined
             )
 
-            const page = await extractPage(url)
-            if (!page) {
+            try {
+              const page = await extractPage(url)
+              if (!page) {
+                return 'Could not fetch this page. Try a different URL.'
+              }
+
+              sources.push({ title: page.title, url: page.url })
+              return `# ${page.title}\n\n${page.content}`
+            } catch (err) {
+              console.error('[Bob] Page fetch error:', err)
               return 'Could not fetch this page. Try a different URL.'
             }
-
-            sources.push({ title: page.title, url: page.url })
-            return `# ${page.title}\n\n${page.content}`
           },
         }),
       }

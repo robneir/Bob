@@ -436,8 +436,12 @@ ipcMain.handle('llm:query', async (event, text: string) => {
   const provider = settingsStore.get('provider') as string
   const sender = event.sender
 
+  const safeSend = (channel: string, ...args: unknown[]) => {
+    if (!sender.isDestroyed()) sender.send(channel, ...args)
+  }
+
   try {
-    sender.send('bob:state', 'thinking')
+    safeSend('bob:state', 'thinking')
 
     if (provider === 'local') {
       // Use bundled local model via node-llama-cpp with agentic search tools
@@ -491,11 +495,9 @@ ipcMain.handle('llm:query', async (event, text: string) => {
             if (!hasStartedStreaming) {
               hasStartedStreaming = true
               emitStatus(sender, 'answering')
-              sender.send('bob:state', 'streaming')
+              safeSend('bob:state', 'streaming')
             }
-            if (!sender.isDestroyed()) {
-              sender.send('llm:token', chunk)
-            }
+            safeSend('llm:token', chunk)
           },
         })
       } finally {
@@ -505,11 +507,11 @@ ipcMain.handle('llm:query', async (event, text: string) => {
 
       // Send collected sources to the renderer
       if (sources.length > 0) {
-        sender.send('bob:sources', sources)
+        safeSend('bob:sources', sources)
       }
 
-      sender.send('llm:done')
-      sender.send('bob:state', 'complete')
+      safeSend('llm:done')
+      safeSend('bob:state', 'complete')
     } else {
       // Cloud providers via Vercel AI SDK
       const { streamText } = await import('ai')
@@ -559,7 +561,7 @@ ipcMain.handle('llm:query', async (event, text: string) => {
       // Send sources to renderer
       const sources = validPages.map((p) => ({ title: p.title, url: p.url }))
       if (sources.length > 0) {
-        sender.send('bob:sources', sources)
+        safeSend('bob:sources', sources)
       }
 
       // Add user message to history
@@ -584,7 +586,7 @@ ipcMain.handle('llm:query', async (event, text: string) => {
       ]
 
       emitStatus(sender, 'answering')
-      sender.send('bob:state', 'streaming')
+      safeSend('bob:state', 'streaming')
 
       const result = streamText({
         model: aiModel,
@@ -596,20 +598,20 @@ ipcMain.handle('llm:query', async (event, text: string) => {
       for await (const chunk of result.textStream) {
         if (sender.isDestroyed()) break
         assistantResponse += chunk
-        sender.send('llm:token', chunk)
+        safeSend('llm:token', chunk)
       }
 
       // Add assistant response to history
       cloudMessages.push({ role: 'assistant', content: assistantResponse })
 
-      sender.send('llm:done')
-      sender.send('bob:state', 'complete')
+      safeSend('llm:done')
+      safeSend('bob:state', 'complete')
     }
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Unknown error occurred'
-    sender.send('llm:error', message)
-    sender.send('bob:state', 'error')
+    safeSend('llm:error', message)
+    safeSend('bob:state', 'error')
   }
 })
 

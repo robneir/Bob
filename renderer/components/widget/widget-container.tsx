@@ -292,6 +292,7 @@ export default function WidgetContainer() {
     resetStreamingState()
     setError('')
     if (window.bob) {
+      window.bob.clearConversation?.()
       window.bob.hideWidget()
     }
   }, [resetStreamingState])
