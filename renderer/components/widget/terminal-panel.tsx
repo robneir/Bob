@@ -19,11 +19,12 @@ export default function TerminalPanel({
   const fitRef = useRef<any>(null)
   const [ready, setReady] = useState(false)
 
-  // Re-fit terminal when becoming visible again
+  // Re-fit and focus terminal when becoming visible
   useEffect(() => {
     if (visible && fitRef.current) {
       requestAnimationFrame(() => {
         fitRef.current?.fit()
+        xtermRef.current?.focus()
       })
     }
   }, [visible])
@@ -136,6 +137,7 @@ export default function TerminalPanel({
       const detail = (_e as CustomEvent<string>).detail
       if (detail && xtermRef.current) {
         window.bob?.writePty(detail)
+        xtermRef.current.focus()
       }
     }
     window.addEventListener('bob:paste-to-terminal', handler)
