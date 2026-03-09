@@ -65,6 +65,11 @@ const bob = {
     ipcRenderer.on('llm:error', handler)
     return () => ipcRenderer.removeListener('llm:error', handler)
   },
+  onStatus: (cb: (status: { step: string; message: string; icon: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, status: { step: string; message: string; icon: string }) => cb(status)
+    ipcRenderer.on('bob:status', handler)
+    return () => ipcRenderer.removeListener('bob:status', handler)
+  },
 
   // Recording state events from main process
   onStateChange: (
