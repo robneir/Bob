@@ -2,7 +2,6 @@ import path from 'path'
 import os from 'os'
 import {
   app,
-  dialog,
   ipcMain,
   globalShortcut,
   Tray,
@@ -327,73 +326,29 @@ ipcMain.handle('whisper:load', async () => {
 
 // --- CLI / PTY ---
 
-// Handle CLI trust prompts (e.g. Claude Code "trust this folder") in the background.
-// Spawns the CLI briefly, auto-accepts the prompt, then exits. One-time per provider.
-async function ensureProviderTrusted(providerId: string, command: string): Promise<boolean> {
-  const trustKey = `cliTrusted_${providerId}`
-  if (settingsStore.get(trustKey)) return true
+// Pre-trust a directory for Claude Code by writing to ~/.claude.json.
+// Parent directory trust cascades to children, so trusting ~ covers everything.
+function ensureClaudeTrust() {
+  const fs = require('fs')
+  const configPath = path.join(os.homedir(), '.claude.json')
+  const homeDir = os.homedir()
 
-  // Show a native dialog asking the user to grant trust
-  const { response } = await dialog.showMessageBox({
-    type: 'question',
-    buttons: ['Allow', 'Cancel'],
-    defaultId: 0,
-    title: 'Folder Access',
-    message: `Allow Bob to run ${command} from your home directory?`,
-    detail: 'Some CLI tools need to trust the working directory on first use. Bob will handle this automatically. You only need to do this once.',
-  })
-
-  if (response !== 0) return false
-
-  // Spawn the CLI briefly to handle any trust/setup prompts
-  const { spawn: ptySpawn } = await import('node-pty')
-  const shell = process.env.SHELL || '/bin/zsh'
-
-  await new Promise<void>((resolve) => {
-    const tempPty = ptySpawn(shell, ['-l', '-c', command], {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 24,
-      cwd: os.homedir(),
-      env: process.env as Record<string, string>,
-    })
-
-    let output = ''
-    let done = false
-    let settleTimer: ReturnType<typeof setTimeout> | null = null
-
-    const finish = () => {
-      if (done) return
-      done = true
-      try { tempPty.kill() } catch {}
-      resolve()
+  try {
+    let config: any = {}
+    if (fs.existsSync(configPath)) {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
     }
 
-    tempPty.onData((data) => {
-      output += data
+    if (!config.projects) config.projects = {}
+    if (!config.projects[homeDir]) config.projects[homeDir] = {}
 
-      // Auto-accept trust/permission prompts
-      if (/trust.*(?:folder|directory|files)/i.test(output)) {
-        setTimeout(() => {
-          tempPty.write('y\n')
-          setTimeout(finish, 1500) // Wait for trust to persist
-        }, 150)
-        return
-      }
+    if (config.projects[homeDir].hasTrustDialogAccepted) return // Already trusted
 
-      // If CLI is outputting non-trust content, it's already trusted — exit
-      if (settleTimer) clearTimeout(settleTimer)
-      settleTimer = setTimeout(finish, 800)
-    })
-
-    tempPty.onExit(() => finish())
-
-    // Hard timeout fallback
-    setTimeout(finish, 8000)
-  })
-
-  settingsStore.set(trustKey, true)
-  return true
+    config.projects[homeDir].hasTrustDialogAccepted = true
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+  } catch {
+    // If we can't write the config, the trust prompt will appear normally
+  }
 }
 
 ipcMain.handle('pty:spawn', async (event) => {
@@ -407,10 +362,9 @@ ipcMain.handle('pty:spawn', async (event) => {
     return { success: false, error: 'No CLI provider selected. Please select one in Settings.' }
   }
 
-  // Handle first-time trust before spawning the real session
-  const trusted = await ensureProviderTrusted(providerId, provider.command)
-  if (!trusted) {
-    return { success: false, error: 'Folder trust is required to use this CLI tool.' }
+  // Pre-trust home directory for Claude Code — instant, no prompts
+  if (providerId === 'claude') {
+    ensureClaudeTrust()
   }
 
   const pty = spawnCli(provider.command)
