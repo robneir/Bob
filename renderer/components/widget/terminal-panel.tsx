@@ -136,17 +136,24 @@ export default function TerminalPanel({
     }
   }, [])
 
-  // Listen for voice transcription paste events
+  // Listen for voice transcription paste events and focus requests
   useEffect(() => {
-    const handler = (_e: Event) => {
+    const pasteHandler = (_e: Event) => {
       const detail = (_e as CustomEvent<string>).detail
       if (detail) {
         window.bob?.writePty(detail)
         xtermRef.current?.focus()
       }
     }
-    window.addEventListener('bob:paste-to-terminal', handler)
-    return () => window.removeEventListener('bob:paste-to-terminal', handler)
+    const focusHandler = () => {
+      xtermRef.current?.focus()
+    }
+    window.addEventListener('bob:paste-to-terminal', pasteHandler)
+    window.addEventListener('bob:focus-terminal', focusHandler)
+    return () => {
+      window.removeEventListener('bob:paste-to-terminal', pasteHandler)
+      window.removeEventListener('bob:focus-terminal', focusHandler)
+    }
   }, [])
 
   return (

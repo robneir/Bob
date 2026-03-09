@@ -185,12 +185,17 @@ export default function WidgetContainer() {
 
           // CLI is ready — write directly to PTY (no xterm dependency)
           window.bob.writePty(text)
+          // Focus terminal once xterm has loaded
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('bob:focus-terminal'))
+          }, 300)
         } else {
           setState('terminal')
 
           // Existing session — CLI is ready, paste immediately
           setTimeout(() => {
             window.bob.writePty(text)
+            window.dispatchEvent(new CustomEvent('bob:focus-terminal'))
           }, 100)
         }
       } catch (err) {
